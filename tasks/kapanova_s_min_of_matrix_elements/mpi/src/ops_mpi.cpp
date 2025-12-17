@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <climits>
 #include <cstddef>
+#include <utility>  // ДОБАВИТЬ для std::pair
 #include <vector>
 
 #include "kapanova_s_min_of_matrix_elements/common/include/common.hpp"
@@ -61,7 +62,9 @@ std::vector<int> PrepareAndBroadcastMatrix(int rank, int total_rows, int total_c
     flat_matrix.resize(total_elements);
     for (int i = 0; i < total_rows; ++i) {
       for (int j = 0; j < total_cols; ++j) {
-        flat_matrix[static_cast<size_t>(i) * static_cast<size_t>(total_cols) + static_cast<size_t>(j)] = matrix[i][j];
+        // ИСПРАВЛЕНО: добавлены скобки
+        const size_t index = (static_cast<size_t>(i) * static_cast<size_t>(total_cols)) + static_cast<size_t>(j);
+        flat_matrix[index] = matrix[i][j];
       }
     }
   } else {
@@ -84,7 +87,8 @@ std::pair<int, int> CalculateLocalRange(int rank, int size, int total_rows, int 
     start_element = rank * (elements_per_process + 1);
     end_element = start_element + elements_per_process + 1;
   } else {
-    start_element = rank * elements_per_process + remainder;
+    // ИСПРАВЛЕНО: добавлены скобки
+    start_element = (rank * elements_per_process) + remainder;
     end_element = start_element + elements_per_process;
   }
 
@@ -97,11 +101,11 @@ int FindLocalMinimum(const std::vector<int> &flat_matrix, int start_element, int
   for (int elem_idx = start_element; elem_idx < end_element; ++elem_idx) {
     const int row = elem_idx / total_cols;
     const int col = elem_idx % total_cols;
+    // ИСПРАВЛЕНО: добавлены скобки
     const int index = (row * total_cols) + col;
 
-    if (flat_matrix[index] < local_min) {
-      local_min = flat_matrix[index];
-    }
+    // ИСПРАВЛЕНО: используем std::min вместо сравнения
+    local_min = std::min(flat_matrix[index], local_min);
   }
 
   return local_min;
