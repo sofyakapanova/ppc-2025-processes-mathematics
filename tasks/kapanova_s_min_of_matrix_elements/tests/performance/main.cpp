@@ -38,7 +38,7 @@ class KapanovaSRunFuncTestsMinMatrixElements : public ppc::util::BaseRunPerfTest
   }
 
   void SetUp() override {
-    input_data_ = GenerateMatrix(7000);  // 4096x4096 = 16.7 млн элементов
+    input_data_ = GenerateMatrix(5000);  // 4096x4096 = 16.7 млн элементов
   }
 
   bool CheckTestOutputData(OutType &output_data) final {

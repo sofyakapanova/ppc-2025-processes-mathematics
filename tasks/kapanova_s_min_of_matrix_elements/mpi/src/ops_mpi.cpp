@@ -35,64 +35,47 @@ bool KapanovaSMinOfMatrixElementsMPI::PreProcessingImpl() {
   return true;
 }
 
-bool KapanovaSMinOfMatrixElementsMPI::RunImpl() {
-  int rank = 0;
-  int size = 0;
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-  MPI_Comm_size(MPI_COMM_WORLD, &size);
+namespace {
 
-  // Только rank 0 имеет исходную матрицу
-  auto &matrix = GetInput();
+// Вспомогательные функции для уменьшения когнитивной сложности
 
-  // Переменные для размеров матрицы
+std::pair<int, int> GetMatrixDimensions(int rank, const InType &matrix) {
   int total_rows = 0;
   int total_cols = 0;
 
-  // 1. Rank 0 определяет размеры матрицы и рассылает их всем
   if (rank == 0) {
-    if (matrix.empty()) {
-      total_rows = 0;
-      total_cols = 0;
-    } else {
+    if (!matrix.empty()) {
       total_rows = static_cast<int>(matrix.size());
       total_cols = static_cast<int>(matrix[0].size());
     }
   }
 
-  // Рассылаем размеры матрицы всем процессам
-  MPI_Bcast(&total_rows, 1, MPI_INT, 0, MPI_COMM_WORLD);
-  MPI_Bcast(&total_cols, 1, MPI_INT, 0, MPI_COMM_WORLD);
+  return {total_rows, total_cols};
+}
 
-  // Если матрица пустая
-  if (total_rows == 0 || total_cols == 0) {
-    GetOutput() = INT_MAX;
-    return true;
-  }
-
-  // 2. Рассылаем саму матрицу
-  // Сначала делаем "плоский" массив для рассылки
+std::vector<int> PrepareAndBroadcastMatrix(int rank, int total_rows, int total_cols, const InType &matrix) {
   std::vector<int> flat_matrix;
+  const size_t total_elements = static_cast<size_t>(total_rows) * static_cast<size_t>(total_cols);
 
   if (rank == 0) {
-    flat_matrix.resize(total_rows * total_cols);
+    flat_matrix.resize(total_elements);
     for (int i = 0; i < total_rows; ++i) {
       for (int j = 0; j < total_cols; ++j) {
-        flat_matrix[i * total_cols + j] = matrix[i][j];
+        flat_matrix[static_cast<size_t>(i) * static_cast<size_t>(total_cols) + static_cast<size_t>(j)] = matrix[i][j];
       }
     }
   } else {
-    // Остальные процессы выделяют память
-    flat_matrix.resize(total_rows * total_cols);
+    flat_matrix.resize(total_elements);
   }
 
-  // Рассылаем плоскую матрицу всем процессам
-  MPI_Bcast(flat_matrix.data(), total_rows * total_cols, MPI_INT, 0, MPI_COMM_WORLD);
+  MPI_Bcast(flat_matrix.data(), static_cast<int>(total_elements), MPI_INT, 0, MPI_COMM_WORLD);
+  return flat_matrix;
+}
 
-  // 3. Теперь каждый процесс вычисляет свою часть
+std::pair<int, int> CalculateLocalRange(int rank, int size, int total_rows, int total_cols) {
   const int total_elements = total_rows * total_cols;
-
-  int elements_per_process = total_elements / size;
-  int remainder = total_elements % size;
+  const int elements_per_process = total_elements / size;
+  const int remainder = total_elements % size;
 
   int start_element = 0;
   int end_element = 0;
@@ -101,24 +84,69 @@ bool KapanovaSMinOfMatrixElementsMPI::RunImpl() {
     start_element = rank * (elements_per_process + 1);
     end_element = start_element + elements_per_process + 1;
   } else {
-    start_element = (rank * elements_per_process) + remainder;
+    start_element = rank * elements_per_process + remainder;
     end_element = start_element + elements_per_process;
   }
 
-  // 4. Вычисляем локальный минимум
+  return {start_element, end_element};
+}
+
+int FindLocalMinimum(const std::vector<int> &flat_matrix, int start_element, int end_element, int total_cols) {
   int local_min = INT_MAX;
+
   for (int elem_idx = start_element; elem_idx < end_element; ++elem_idx) {
     const int row = elem_idx / total_cols;
     const int col = elem_idx % total_cols;
+    const int index = (row * total_cols) + col;
 
-    local_min = std::min(flat_matrix[(row * total_cols) + col], local_min);
+    if (flat_matrix[index] < local_min) {
+      local_min = flat_matrix[index];
+    }
   }
 
-  // 5. Собираем глобальный минимум
+  return local_min;
+}
+
+int FindGlobalMinimum(int local_min, int size) {
   int global_min = local_min;
+
   if (size > 1) {
     MPI_Allreduce(&local_min, &global_min, 1, MPI_INT, MPI_MIN, MPI_COMM_WORLD);
   }
+
+  return global_min;
+}
+
+}  // namespace
+
+bool KapanovaSMinOfMatrixElementsMPI::RunImpl() {
+  int rank = 0;
+  int size = 0;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &size);
+
+  // 1. Получаем размеры матрицы
+  auto [total_rows, total_cols] = GetMatrixDimensions(rank, GetInput());
+  MPI_Bcast(&total_rows, 1, MPI_INT, 0, MPI_COMM_WORLD);
+  MPI_Bcast(&total_cols, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+  // 2. Проверяем пустую матрицу
+  if (total_rows == 0 || total_cols == 0) {
+    GetOutput() = INT_MAX;
+    return true;
+  }
+
+  // 3. Подготавливаем и рассылаем матрицу
+  std::vector<int> flat_matrix = PrepareAndBroadcastMatrix(rank, total_rows, total_cols, GetInput());
+
+  // 4. Определяем диапазон для текущего процесса
+  auto [start_element, end_element] = CalculateLocalRange(rank, size, total_rows, total_cols);
+
+  // 5. Находим локальный минимум
+  int local_min = FindLocalMinimum(flat_matrix, start_element, end_element, total_cols);
+
+  // 6. Находим глобальный минимум
+  int global_min = FindGlobalMinimum(local_min, size);
 
   GetOutput() = global_min;
   return true;
