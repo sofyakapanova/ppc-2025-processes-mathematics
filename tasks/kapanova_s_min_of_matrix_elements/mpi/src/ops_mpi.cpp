@@ -111,7 +111,7 @@ bool KapanovaSMinOfMatrixElementsMPI::RunImpl() {
     const int row = elem_idx / total_cols;
     const int col = elem_idx % total_cols;
 
-    local_min = std::min(flat_matrix[row * total_cols + col], local_min);
+    local_min = std::min(flat_matrix[(row * total_cols) + col], local_min);
   }
 
   // 5. Собираем глобальный минимум

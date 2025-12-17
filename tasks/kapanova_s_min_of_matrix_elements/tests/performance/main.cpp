@@ -2,7 +2,10 @@
 
 #include <algorithm>  // Добавлено для std::ranges::all_of
 #include <cmath>
+#include <fstream>  // для std::ifstream, std::getline
 #include <random>
+#include <sstream>  // для std::istringstream
+#include <string>   // для std::string
 #include <vector>
 
 #include "kapanova_s_min_of_matrix_elements/common/include/common.hpp"
