@@ -25,7 +25,7 @@ class KapanovaSImageSmoothingFuncTests : public ppc::util::BaseRunFuncTests<InTy
   void SetUp() override {
     auto test_params = std::get<static_cast<size_t>(ppc::util::GTestParamIndex::kTestParams)>(GetParam());
     std::string test_name = std::get<1>(test_params);  // Используем только имя теста
-    
+
     // kernel_size игнорируем, так как у нас фиксированный размер 3x3
     int kernel_size = 3;  // Фиксированный размер ядра
 
@@ -139,12 +139,12 @@ TEST_P(KapanovaSImageSmoothingFuncTests, SmoothImage) {
 // Тестовые параметры: (размер_ядра, имя_теста)
 // Теперь размер ядра игнорируется, используется всегда 3
 const std::array<TestType, 6> kTestParam = {
-    std::make_tuple(3, "kernel3"),      // kernel3 - маленькое изображение 4x4
-    std::make_tuple(3, "kernel5"),      // kernel5 - равномерное изображение 8x8
-    std::make_tuple(3, "kernel7"),      // kernel7 - градиентное изображение 5x5
-    std::make_tuple(3, "small_image"),  // small_image - очень маленькое 3x3
-    std::make_tuple(3, "kernel1"),      // kernel1 - изображение 4x3 (теперь с kernel_size=3)
-    std::make_tuple(3, "default_image") // default_image - стандартное 10x10
+    std::make_tuple(3, "kernel3"),       // kernel3 - маленькое изображение 4x4
+    std::make_tuple(3, "kernel5"),       // kernel5 - равномерное изображение 8x8
+    std::make_tuple(3, "kernel7"),       // kernel7 - градиентное изображение 5x5
+    std::make_tuple(3, "small_image"),   // small_image - очень маленькое 3x3
+    std::make_tuple(3, "kernel1"),       // kernel1 - изображение 4x3 (теперь с kernel_size=3)
+    std::make_tuple(3, "default_image")  // default_image - стандартное 10x10
 };
 
 const auto kTestTasksList = std::tuple_cat(

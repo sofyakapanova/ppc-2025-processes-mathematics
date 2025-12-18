@@ -15,15 +15,15 @@ KapanovaSImageSmoothingSEQ::KapanovaSImageSmoothingSEQ(const InType &in) : BaseT
 
 bool KapanovaSImageSmoothingSEQ::ValidationImpl() {
   auto &input = GetInput();
-  
+
   if (input.width <= 0 || input.height <= 0) {
     return false;
   }
-  
+
   if (input.pixels.size() != static_cast<size_t>(input.width) * input.height) {
     return false;
   }
-  
+
   return true;
 }
 
@@ -31,12 +31,12 @@ bool KapanovaSImageSmoothingSEQ::PreProcessingImpl() {
   auto &input = GetInput();
   width_ = input.width;
   height_ = input.height;
-  
+
   input_ = input.pixels;
-  
+
   GetOutput() = input;
   output_.resize(input_.size());
-  
+
   return true;
 }
 
@@ -44,25 +44,25 @@ std::vector<float> KapanovaSImageSmoothingSEQ::create_gaussian_kernel(int radius
   int size = 2 * radius + 1;
   std::vector<float> kernel(size * size);
   float norm = 0.0f;
-  
+
   for (int i = -radius; i <= radius; ++i) {
     for (int j = -radius; j <= radius; ++j) {
       kernel[(i + radius) * size + (j + radius)] = std::exp(-(i * i + j * j) / (2 * sigma * sigma));
       norm += kernel[(i + radius) * size + (j + radius)];
     }
   }
-  
-  for (float& val : kernel) {
+
+  for (float &val : kernel) {
     val /= norm;
   }
-  
+
   return kernel;
 }
 
-void KapanovaSImageSmoothingSEQ::convolve_rows(const std::vector<uint8_t>& input, int height, int width,
-                                              const std::vector<float>& kernel, std::vector<float>& temp) {
+void KapanovaSImageSmoothingSEQ::convolve_rows(const std::vector<uint8_t> &input, int height, int width,
+                                               const std::vector<float> &kernel, std::vector<float> &temp) {
   int kernel_radius = 1;
-  
+
   for (int y = 0; y < height; ++y) {
     for (int x = 0; x < width; ++x) {
       float sum = 0.0f;
@@ -75,10 +75,10 @@ void KapanovaSImageSmoothingSEQ::convolve_rows(const std::vector<uint8_t>& input
   }
 }
 
-void KapanovaSImageSmoothingSEQ::convolve_columns(const std::vector<float>& temp, int height, int width,
-                                                 const std::vector<float>& kernel, std::vector<uint8_t>& output) {
+void KapanovaSImageSmoothingSEQ::convolve_columns(const std::vector<float> &temp, int height, int width,
+                                                  const std::vector<float> &kernel, std::vector<uint8_t> &output) {
   int kernel_radius = 1;
-  
+
   for (int y = 0; y < height; ++y) {
     for (int x = 0; x < width; ++x) {
       float sum = 0.0f;
@@ -94,15 +94,15 @@ void KapanovaSImageSmoothingSEQ::convolve_columns(const std::vector<float>& temp
 bool KapanovaSImageSmoothingSEQ::RunImpl() {
   const int radius = 1;
   const float sigma = 1.5f;
-  
+
   std::vector<float> horizontal_kernel = create_gaussian_kernel(radius, sigma);
-  const std::vector<float>& vertical_kernel = horizontal_kernel;
-  
+  const std::vector<float> &vertical_kernel = horizontal_kernel;
+
   std::vector<float> temp(width_ * height_, 0.0f);
-  
+
   convolve_rows(input_, height_, width_, horizontal_kernel, temp);
   convolve_columns(temp, height_, width_, vertical_kernel, output_);
-  
+
   return true;
 }
 

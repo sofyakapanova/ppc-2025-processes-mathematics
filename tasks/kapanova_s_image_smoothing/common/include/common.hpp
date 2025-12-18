@@ -16,8 +16,7 @@ struct ImageData {
   int kernel_size = 0;
 
   bool operator==(const ImageData &other) const {
-    return pixels == other.pixels && width == other.width && 
-           height == other.height && kernel_size == other.kernel_size;
+    return pixels == other.pixels && width == other.width && height == other.height && kernel_size == other.kernel_size;
   }
 };
 
