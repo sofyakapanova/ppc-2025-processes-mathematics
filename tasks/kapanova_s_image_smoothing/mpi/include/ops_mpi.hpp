@@ -18,15 +18,14 @@ class KapanovaSImageSmoothingMPI : public BaseTask {
   bool RunImpl() override;
   bool PostProcessingImpl() override;
 
-  static std::vector<float> create_gaussian_kernel(int radius, float sigma);
-  static void convolve_rows(const std::vector<uint8_t> &input, int height, int width, const std::vector<float> &kernel,
-                            std::vector<float> &temp);
-  static void convolve_columns(const std::vector<float> &temp, int height, int width, const std::vector<float> &kernel,
-                               std::vector<uint8_t> &output);
+  static std::vector<float> CreateGaussianKernel(int kernel_radius, float sigma_val);
+  static void ProcessRows(const std::vector<uint8_t> &input_img, int img_h, int img_w, const std::vector<float> &kernel,
+                          std::vector<float> &temp_buf);
+  static void ProcessColumns(const std::vector<float> &temp_buf, int img_h, int img_w, const std::vector<float> &kernel,
+                             std::vector<uint8_t> &output_img);
 
-  // Добавляем поля для хранения размеров
-  int width_{0};
-  int height_{0};
+  int img_width_{0};
+  int img_height_{0};
 };
 
 }  // namespace kapanova_s_image_smoothing
