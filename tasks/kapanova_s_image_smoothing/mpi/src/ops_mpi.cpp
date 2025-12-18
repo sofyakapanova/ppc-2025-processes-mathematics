@@ -63,8 +63,8 @@ bool KapanovaSImageSmoothingMPI::PreProcessingImpl() {
   if (rank == 0) {
     GetOutput().pixels.resize(total_size, 0);
   } else {
-    // На других процессах также нужно выделить память, но она будет пустой
-    GetOutput().pixels.clear();
+    // На других процессах тоже нужен вектор, но он будет пустым
+    GetOutput().pixels.resize(0);
   }
 
   return true;
@@ -93,24 +93,22 @@ ProcessRange CalculateRowRange(int rank, int size, int total_height) {
 
   return range;
 }
-
 void DistributeData(int rank, int size, const std::vector<uint8_t> &all_data, std::vector<uint8_t> &local_data,
                     int width, int height, int kernel_radius) {
-  // Рассчитываем, какие строки нужны каждому процессу (с учетом перекрытия для ядра)
+  // ВСЕ процессы должны иметь send_counts и displacements
   std::vector<int> send_counts(size, 0);
   std::vector<int> displacements(size, 0);
 
-  if (rank == 0) {
-    for (int proc = 0; proc < size; ++proc) {
-      ProcessRange range = CalculateRowRange(proc, size, height);
+  // Рассчитываем для всех процессов
+  for (int proc = 0; proc < size; ++proc) {
+    ProcessRange range = CalculateRowRange(proc, size, height);
 
-      // Добавляем перекрытие для ядра сверху и снизу
-      int actual_start = std::max(0, range.start_row - kernel_radius);
-      int actual_end = std::min(height, range.end_row + kernel_radius);
+    // Добавляем перекрытие для ядра сверху и снизу
+    int actual_start = std::max(0, range.start_row - kernel_radius);
+    int actual_end = std::min(height, range.end_row + kernel_radius);
 
-      send_counts[proc] = (actual_end - actual_start) * width;
-      displacements[proc] = actual_start * width;
-    }
+    send_counts[proc] = (actual_end - actual_start) * width;
+    displacements[proc] = actual_start * width;
   }
 
   // Получаем информацию о своей части данных
@@ -123,8 +121,8 @@ void DistributeData(int rank, int size, const std::vector<uint8_t> &all_data, st
   local_data.resize(my_count);
 
   // Распределяем данные
-  MPI_Scatterv(rank == 0 ? all_data.data() : nullptr, send_counts.data(), displacements.data(), MPI_UNSIGNED_CHAR,
-               local_data.data(), my_count, MPI_UNSIGNED_CHAR, 0, MPI_COMM_WORLD);
+  MPI_Scatterv(rank == 0 ? const_cast<uint8_t *>(all_data.data()) : nullptr, send_counts.data(), displacements.data(),
+               MPI_UNSIGNED_CHAR, local_data.data(), my_count, MPI_UNSIGNED_CHAR, 0, MPI_COMM_WORLD);
 }
 
 uint8_t SmoothPixel(int global_x, int global_y, int width, int height, int kernel_radius, int local_start_row,
@@ -155,25 +153,21 @@ uint8_t SmoothPixel(int global_x, int global_y, int width, int height, int kerne
 
 void CollectResults(int rank, int size, std::vector<uint8_t> &local_result, std::vector<uint8_t> &all_result, int width,
                     int height) {
-  // Рассчитываем, сколько данных каждый процесс должен отправить
+  // ВСЕ процессы должны иметь recv_counts и displacements
   std::vector<int> recv_counts(size, 0);
   std::vector<int> displacements(size, 0);
 
-  if (rank == 0) {
-    for (int proc = 0; proc < size; ++proc) {
-      ProcessRange range = CalculateRowRange(proc, size, height);
-      recv_counts[proc] = range.total_rows * width;
-      displacements[proc] = range.start_row * width;
-    }
+  // Рассчитываем для всех процессов
+  for (int proc = 0; proc < size; ++proc) {
+    ProcessRange range = CalculateRowRange(proc, size, height);
+    recv_counts[proc] = range.total_rows * width;
+    displacements[proc] = range.start_row * width;
   }
 
   // Собираем результаты
   MPI_Gatherv(local_result.data(), static_cast<int>(local_result.size()), MPI_UNSIGNED_CHAR,
               rank == 0 ? all_result.data() : nullptr, recv_counts.data(), displacements.data(), MPI_UNSIGNED_CHAR, 0,
               MPI_COMM_WORLD);
-
-  // Синхронизируем процессы
-  MPI_Barrier(MPI_COMM_WORLD);
 }
 
 }  // namespace
