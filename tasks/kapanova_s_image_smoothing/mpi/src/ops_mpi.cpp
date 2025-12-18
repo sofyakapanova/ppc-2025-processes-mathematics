@@ -93,6 +93,7 @@ ProcessRange CalculateRowRange(int rank, int size, int total_height) {
 
   return range;
 }
+
 void DistributeData(int rank, int size, const std::vector<uint8_t> &all_data, std::vector<uint8_t> &local_data,
                     int width, int height, int kernel_radius) {
   // ВСЕ процессы должны иметь send_counts и displacements
@@ -111,11 +112,8 @@ void DistributeData(int rank, int size, const std::vector<uint8_t> &all_data, st
     displacements[proc] = actual_start * width;
   }
 
-  // Получаем информацию о своей части данных
-  ProcessRange my_range = CalculateRowRange(rank, size, height);
-  int my_start = std::max(0, my_range.start_row - kernel_radius);
-  int my_end = std::min(height, my_range.end_row + kernel_radius);
-  int my_count = (my_end - my_start) * width;
+  // КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ 1: Используем send_counts[rank] вместо самостоятельного расчета
+  int my_count = send_counts[rank];  // Размер данных для этого процесса
 
   // Выделяем память для локальных данных
   local_data.resize(my_count);
@@ -152,7 +150,7 @@ uint8_t SmoothPixel(int global_x, int global_y, int width, int height, int kerne
 }
 
 void CollectResults(int rank, int size, std::vector<uint8_t> &local_result, std::vector<uint8_t> &all_result, int width,
-                    int height) {
+                    int height, const ProcessRange &my_range) {
   // ВСЕ процессы должны иметь recv_counts и displacements
   std::vector<int> recv_counts(size, 0);
   std::vector<int> displacements(size, 0);
@@ -164,10 +162,13 @@ void CollectResults(int rank, int size, std::vector<uint8_t> &local_result, std:
     displacements[proc] = range.start_row * width;
   }
 
+  // КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ 2: Определяем, сколько данных отправлять
+  // Нужно отправлять только те строки, которые не являются граничными для всего изображения
+  int send_size = my_range.total_rows * width;
+
   // Собираем результаты
-  MPI_Gatherv(local_result.data(), static_cast<int>(local_result.size()), MPI_UNSIGNED_CHAR,
-              rank == 0 ? all_result.data() : nullptr, recv_counts.data(), displacements.data(), MPI_UNSIGNED_CHAR, 0,
-              MPI_COMM_WORLD);
+  MPI_Gatherv(local_result.data(), send_size, MPI_UNSIGNED_CHAR, rank == 0 ? all_result.data() : nullptr,
+              recv_counts.data(), displacements.data(), MPI_UNSIGNED_CHAR, 0, MPI_COMM_WORLD);
 }
 
 }  // namespace
@@ -213,7 +214,7 @@ bool KapanovaSImageSmoothingMPI::RunImpl() {
   }
 
   // 4. Собираем результаты на процессе 0
-  CollectResults(rank, size, local_result, output.pixels, width, height);
+  CollectResults(rank, size, local_result, output.pixels, width, height, my_range);
 
   // 5. На всех процессах должны быть правильные размеры выходных данных
   if (rank == 0) {
