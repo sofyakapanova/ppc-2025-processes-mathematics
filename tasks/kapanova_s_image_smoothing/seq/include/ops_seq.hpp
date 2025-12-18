@@ -1,7 +1,6 @@
 #pragma once
 
 #include "kapanova_s_image_smoothing/common/include/common.hpp"
-#include "task/include/task.hpp"
 
 namespace kapanova_s_image_smoothing {
 
@@ -18,10 +17,8 @@ class KapanovaSImageSmoothingSEQ : public BaseTask {
   bool PreProcessingImpl() override;
   bool RunImpl() override;
   bool PostProcessingImpl() override;
-
-  // Вспомогательные методы
-  int Clamp(int value, int min_val, int max_val) const;
-  uint8_t CalculatePixelAverage(int x, int y) const;
+  
+  std::vector<float> CreateGaussianKernel();
 };
 
 }  // namespace kapanova_s_image_smoothing
