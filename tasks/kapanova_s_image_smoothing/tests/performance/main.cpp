@@ -47,20 +47,10 @@ class KapanovaSImageSmoothingPerfTests : public ppc::util::BaseRunPerfTests<InTy
       }
 
       // Проверяем, что результат не пустой и содержит данные
-      // (не проверяем диапазон, так как uint8_t всегда в диапазоне 0-255)
       if (output_data.pixels.empty()) {
         return false;
       }
 
-      // Проверяем, что не все значения одинаковы (простая эвристика)
-      // Это гарантирует, что алгоритм что-то сделал
-      const uint8_t first_value = output_data.pixels[0];
-      bool all_same =
-          std::ranges::all_of(output_data.pixels, [first_value](uint8_t val) { return val == first_value; });
-
-      // Если все значения одинаковые, возможно алгоритм не работает
-      // Но в случае однородного изображения это может быть нормально
-      // Поэтому просто возвращаем true, если размер правильный
       return true;
 
     } else {
