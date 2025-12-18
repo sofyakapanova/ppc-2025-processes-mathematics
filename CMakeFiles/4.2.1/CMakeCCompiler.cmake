@@ -7,7 +7,9 @@ set(CMAKE_C_COMPILER_WRAPPER "")
 set(CMAKE_C_STANDARD_COMPUTED_DEFAULT "17")
 set(CMAKE_C_EXTENSIONS_COMPUTED_DEFAULT "ON")
 set(CMAKE_C_STANDARD_LATEST "23")
-set(CMAKE_C_COMPILE_FEATURES "c_std_90;c_function_prototypes;c_std_99;c_restrict;c_variadic_macros;c_std_11;c_static_assert;c_std_17;c_std_23")
+set(CMAKE_C_COMPILE_FEATURES
+    "c_std_90;c_function_prototypes;c_std_99;c_restrict;c_variadic_macros;c_std_11;c_static_assert;c_std_17;c_std_23"
+)
 set(CMAKE_C90_COMPILE_FEATURES "c_std_90;c_function_prototypes")
 set(CMAKE_C99_COMPILE_FEATURES "c_std_99;c_restrict;c_variadic_macros")
 set(CMAKE_C11_COMPILE_FEATURES "c_std_11;c_static_assert")
@@ -17,11 +19,10 @@ set(CMAKE_C23_COMPILE_FEATURES "c_std_23")
 set(CMAKE_C_PLATFORM_ID "Darwin")
 set(CMAKE_C_SIMULATE_ID "")
 set(CMAKE_C_COMPILER_FRONTEND_VARIANT "GNU")
-set(CMAKE_C_COMPILER_APPLE_SYSROOT "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk")
+set(CMAKE_C_COMPILER_APPLE_SYSROOT
+    "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk")
 set(CMAKE_C_SIMULATE_VERSION "")
 set(CMAKE_C_COMPILER_ARCHITECTURE_ID "arm64")
-
-
 
 set(CMAKE_AR "/usr/bin/ar")
 set(CMAKE_C_COMPILER_AR "")
@@ -36,7 +37,7 @@ set(CMAKE_C_COMPILER_LINKER_VERSION 1230.1)
 set(CMAKE_C_COMPILER_LINKER_FRONTEND_VARIANT GNU)
 set(CMAKE_MT "")
 set(CMAKE_TAPI "/Library/Developer/CommandLineTools/usr/bin/tapi")
-set(CMAKE_COMPILER_IS_GNUCC )
+set(CMAKE_COMPILER_IS_GNUCC)
 set(CMAKE_C_COMPILER_LOADED 1)
 set(CMAKE_C_COMPILER_WORKS TRUE)
 set(CMAKE_C_ABI_COMPILED TRUE)
@@ -47,9 +48,9 @@ set(CMAKE_C_COMPILER_ID_RUN 1)
 set(CMAKE_C_SOURCE_FILE_EXTENSIONS c;m)
 set(CMAKE_C_IGNORE_EXTENSIONS h;H;o;O;obj;OBJ;def;DEF;rc;RC)
 set(CMAKE_C_LINKER_PREFERENCE 10)
-set(CMAKE_C_LINKER_DEPFILE_SUPPORTED )
-set(CMAKE_LINKER_PUSHPOP_STATE_SUPPORTED )
-set(CMAKE_C_LINKER_PUSHPOP_STATE_SUPPORTED )
+set(CMAKE_C_LINKER_DEPFILE_SUPPORTED)
+set(CMAKE_LINKER_PUSHPOP_STATE_SUPPORTED)
+set(CMAKE_C_LINKER_PUSHPOP_STATE_SUPPORTED)
 
 # Save compiler ABI information.
 set(CMAKE_C_SIZEOF_DATA_PTR "8")
@@ -74,11 +75,13 @@ if(CMAKE_C_CL_SHOWINCLUDES_PREFIX)
   set(CMAKE_CL_SHOWINCLUDES_PREFIX "${CMAKE_C_CL_SHOWINCLUDES_PREFIX}")
 endif()
 
-
-
-
-
-set(CMAKE_C_IMPLICIT_INCLUDE_DIRECTORIES "/Library/Developer/CommandLineTools/usr/lib/clang/17/include;/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include;/Library/Developer/CommandLineTools/usr/include")
+set(CMAKE_C_IMPLICIT_INCLUDE_DIRECTORIES
+    "/Library/Developer/CommandLineTools/usr/lib/clang/17/include;/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include;/Library/Developer/CommandLineTools/usr/include"
+)
 set(CMAKE_C_IMPLICIT_LINK_LIBRARIES "")
-set(CMAKE_C_IMPLICIT_LINK_DIRECTORIES "/opt/homebrew/opt/boost/lib;/Users/sofakapanova/ppc1/ppc-2025-processes-mathematics;/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/lib;/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/lib/swift")
-set(CMAKE_C_IMPLICIT_LINK_FRAMEWORK_DIRECTORIES "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/Frameworks")
+set(CMAKE_C_IMPLICIT_LINK_DIRECTORIES
+    "/opt/homebrew/opt/boost/lib;/Users/sofakapanova/ppc1/ppc-2025-processes-mathematics;/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/lib;/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/lib/swift"
+)
+set(CMAKE_C_IMPLICIT_LINK_FRAMEWORK_DIRECTORIES
+    "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/Frameworks"
+)

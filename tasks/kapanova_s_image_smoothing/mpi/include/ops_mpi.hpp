@@ -1,8 +1,8 @@
 #pragma once
 
-#include "/opt/homebrew/opt/boost/include/boost/mpi/communicator.hpp"
 #include <vector>
 
+#include "/opt/homebrew/opt/boost/include/boost/mpi/communicator.hpp"
 #include "task/include/task.hpp"
 
 namespace kapanova_s_image_smoothing {

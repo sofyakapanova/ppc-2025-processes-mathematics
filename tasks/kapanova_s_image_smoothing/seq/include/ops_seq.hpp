@@ -2,11 +2,13 @@
 
 #include <memory>
 #include <vector>
+
 #include "task/include/task.hpp"
 
 namespace kapanova_s_image_smoothing {
 
-class KapanovaSImageSmoothingSEQ : public ppc::task::Task<std::vector<std::vector<int>>, std::vector<std::vector<int>>> {
+class KapanovaSImageSmoothingSEQ
+    : public ppc::task::Task<std::vector<std::vector<int>>, std::vector<std::vector<int>>> {
  public:
   static constexpr ppc::task::TypeOfTask GetStaticTypeOfTask() {
     return ppc::task::TypeOfTask::kSEQ;
@@ -18,12 +20,12 @@ class KapanovaSImageSmoothingSEQ : public ppc::task::Task<std::vector<std::vecto
   bool PreProcessingImpl() override;
   bool RunImpl() override;
   bool PostProcessingImpl() override;
-  
+
   // Вспомогательные методы
   void generateGaussianKernel();
   void smoothPixel(int x, int y);
   int limitToRange(int value, int lower, int upper);
-  
+
   // Данные
   int img_height_;
   int img_width_;
