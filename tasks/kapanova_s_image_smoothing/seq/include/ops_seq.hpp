@@ -17,7 +17,7 @@ class KapanovaSImageSmoothingSEQ : public BaseTask {
   bool PreProcessingImpl() override;
   bool RunImpl() override;
   bool PostProcessingImpl() override;
-  
+
   std::vector<float> CreateGaussianKernel();
 };
 
