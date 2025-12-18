@@ -1,16 +1,19 @@
 #pragma once
 
-#include "kapanova_s_image_smoothing/common/include/common.hpp"
+#include "/opt/homebrew/opt/boost/include/boost/mpi/communicator.hpp"
+#include <vector>
+
+#include "task/include/task.hpp"
 
 namespace kapanova_s_image_smoothing {
 
-class KapanovaSImageSmoothingMPI : public BaseTask {
+class KapanovaSImageSmoothingMPI
+    : public ppc::task::Task<std::vector<std::vector<int>>, std::vector<std::vector<int>>> {
  public:
   static constexpr ppc::task::TypeOfTask GetStaticTypeOfTask() {
     return ppc::task::TypeOfTask::kMPI;
   }
-
-  explicit KapanovaSImageSmoothingMPI(const InType &in);
+  explicit KapanovaSImageSmoothingMPI(const std::vector<std::vector<int>> &in);
 
  private:
   bool ValidationImpl() override;
@@ -18,14 +21,18 @@ class KapanovaSImageSmoothingMPI : public BaseTask {
   bool RunImpl() override;
   bool PostProcessingImpl() override;
 
-  static std::vector<float> CreateGaussianKernel(int kernel_radius, float sigma_val);
-  static void ProcessRows(const std::vector<uint8_t> &input_img, int img_h, int img_w, const std::vector<float> &kernel,
-                          std::vector<float> &temp_buf);
-  static void ProcessColumns(const std::vector<float> &temp_buf, int img_h, int img_w, const std::vector<float> &kernel,
-                             std::vector<uint8_t> &output_img);
+  // Вспомогательные методы
+  void createGaussianKernel();
+  void processPixel(int x, int y);
+  int clampValue(int value, int min_val, int max_val);
 
-  int img_width_{0};
-  int img_height_{0};
+  // Данные
+  int image_height_;
+  int image_width_;
+  std::vector<std::vector<int>> input_matrix_;
+  std::vector<std::vector<int>> output_matrix_;
+  std::vector<float> gaussian_kernel_;
+  boost::mpi::communicator mpi_communicator_;
 };
 
 }  // namespace kapanova_s_image_smoothing

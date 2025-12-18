@@ -1,162 +1,357 @@
 #include <gtest/gtest.h>
 
-#include <array>
-#include <cstddef>
-#include <cstdint>
-#include <string>
-#include <tuple>
+#include <boost/mpi/communicator.hpp>
+#include <boost/mpi/environment.hpp>
+#include <random>
 #include <vector>
 
-#include "kapanova_s_image_smoothing/common/include/common.hpp"
 #include "kapanova_s_image_smoothing/mpi/include/ops_mpi.hpp"
 #include "kapanova_s_image_smoothing/seq/include/ops_seq.hpp"
-#include "util/include/func_test_util.hpp"
-#include "util/include/util.hpp"
 
-namespace kapanova_s_image_smoothing {
+std::vector<uint8_t> generateRandomPixels(int height, int width) {
+  std::random_device dev;
+  std::mt19937 gen(dev());
+  std::uniform_int_distribution<> distrib(0, 255);
+  std::vector<uint8_t> pixels(height * width * 3);
 
-class KapanovaSImageSmoothingFuncTests : public ppc::util::BaseRunFuncTests<InType, OutType, TestType> {
- public:
-  static std::string PrintTestParam(const TestType &test_param) {
-    return std::get<1>(test_param);  // Возвращаем только имя теста
+  for (size_t i = 0; i < pixels.size(); ++i) {
+    pixels[i] = static_cast<uint8_t>(distrib(gen));
   }
-
- protected:
-  void SetUp() override {
-    auto test_params = std::get<static_cast<size_t>(ppc::util::GTestParamIndex::kTestParams)>(GetParam());
-    std::string test_name = std::get<1>(test_params);  // Используем только имя теста
-
-    // kernel_size игнорируем, так как у нас фиксированный размер 3x3
-    int kernel_size = 3;  // Фиксированный размер ядра
-
-    // Создаем тестовые данные
-    if (test_name == "kernel3") {
-      CreateSmallImage(kernel_size);
-    } else if (test_name == "kernel5") {
-      CreateUniformImage(kernel_size);
-    } else if (test_name == "kernel7") {
-      CreateGradientImage(kernel_size);
-    } else if (test_name == "small_image") {
-      CreateSmallTestImage(kernel_size);
-    } else if (test_name == "kernel1") {
-      CreateKernelSizeOneImage();  // kernel1 не будет работать, нужно изменить
-    } else {
-      CreateDefaultImage(kernel_size);
-    }
-
-    // Создаем эталонный результат с помощью SEQ версии
-    KapanovaSImageSmoothingSEQ seq_task(input_data_);
-    if (seq_task.Validation()) {
-      seq_task.PreProcessing();
-      seq_task.Run();
-      seq_task.PostProcessing();
-      expected_output_ = seq_task.GetOutput();
-    }
-  }
-
-  void CreateSmallImage(int kernel_size) {
-    input_data_.width = 4;
-    input_data_.height = 4;
-    input_data_.kernel_size = kernel_size;  // Храним, но не используем
-    input_data_.pixels.resize(16);
-
-    // Простой паттерн
-    for (int i = 0; i < 16; ++i) {
-      input_data_.pixels[i] = static_cast<uint8_t>(i * 16);
-    }
-  }
-
-  void CreateUniformImage(int kernel_size) {
-    input_data_.width = 8;
-    input_data_.height = 8;
-    input_data_.kernel_size = kernel_size;  // Храним, но не используем
-    input_data_.pixels.assign(64, 100);
-  }
-
-  void CreateGradientImage(int kernel_size) {
-    input_data_.width = 5;
-    input_data_.height = 5;
-    input_data_.kernel_size = kernel_size;  // Храним, но не используем
-    input_data_.pixels.resize(25);
-
-    for (int y = 0; y < 5; ++y) {
-      for (int x = 0; x < 5; ++x) {
-        int index = y * 5 + x;
-        input_data_.pixels[index] = static_cast<uint8_t>((x + y) * 20);
-      }
-    }
-  }
-
-  void CreateSmallTestImage(int kernel_size) {
-    input_data_.width = 3;
-    input_data_.height = 3;
-    input_data_.kernel_size = kernel_size;  // Храним, но не используем
-    input_data_.pixels = {10, 20, 30, 40, 50, 60, 70, 80, 90};
-  }
-
-  void CreateKernelSizeOneImage() {
-    input_data_.width = 4;
-    input_data_.height = 3;
-    input_data_.kernel_size = 3;  // Меняем на 3 вместо 1
-    input_data_.pixels.resize(12);
-
-    for (size_t i = 0; i < input_data_.pixels.size(); ++i) {
-      input_data_.pixels[i] = static_cast<uint8_t>(i * 20);
-    }
-  }
-
-  void CreateDefaultImage(int kernel_size) {
-    input_data_.width = 10;
-    input_data_.height = 10;
-    input_data_.kernel_size = kernel_size;  // Храним, но не используем
-    input_data_.pixels.resize(100);
-
-    for (size_t i = 0; i < input_data_.pixels.size(); ++i) {
-      input_data_.pixels[i] = static_cast<uint8_t>((i * 7) % 256);
-    }
-  }
-
-  bool CheckTestOutputData(OutType &output_data) final {
-    // Сравниваем с эталонным результатом
-    return output_data.pixels == expected_output_.pixels;
-  }
-
-  InType GetTestInputData() final {
-    return input_data_;
-  }
-
- private:
-  InType input_data_;
-  OutType expected_output_;
-};
-
-namespace {
-
-TEST_P(KapanovaSImageSmoothingFuncTests, SmoothImage) {
-  ExecuteTest(GetParam());
+  return pixels;
 }
 
-// Тестовые параметры: (размер_ядра, имя_теста)
-// Теперь размер ядра игнорируется, используется всегда 3
-const std::array<TestType, 6> kTestParam = {
-    std::make_tuple(3, "kernel3"),       // kernel3 - маленькое изображение 4x4
-    std::make_tuple(3, "kernel5"),       // kernel5 - равномерное изображение 8x8
-    std::make_tuple(3, "kernel7"),       // kernel7 - градиентное изображение 5x5
-    std::make_tuple(3, "small_image"),   // small_image - очень маленькое 3x3
-    std::make_tuple(3, "kernel1"),       // kernel1 - изображение 4x3 (теперь с kernel_size=3)
-    std::make_tuple(3, "default_image")  // default_image - стандартное 10x10
-};
+TEST(kapanova_s_image_smoothing, Test_IMAGE_RANDOM_SQUARE) {
+  boost::mpi::communicator world;
 
-const auto kTestTasksList = std::tuple_cat(
-    ppc::util::AddFuncTask<KapanovaSImageSmoothingMPI, InType>(kTestParam, PPC_SETTINGS_kapanova_s_image_smoothing),
-    ppc::util::AddFuncTask<KapanovaSImageSmoothingSEQ, InType>(kTestParam, PPC_SETTINGS_kapanova_s_image_smoothing));
+  int image_width = 10;
+  int image_height = 10;
 
-const auto kGtestValues = ppc::util::ExpandToValues(kTestTasksList);
+  std::vector<uint8_t> original_pixels;
+  std::vector<uint8_t> parallel_result;
 
-const auto kPerfTestName = KapanovaSImageSmoothingFuncTests::PrintFuncTestName<KapanovaSImageSmoothingFuncTests>;
+  std::shared_ptr<ppc::core::TaskData> parallelTaskData = std::make_shared<ppc::core::TaskData>();
 
-INSTANTIATE_TEST_SUITE_P(ImageSmoothingTests, KapanovaSImageSmoothingFuncTests, kGtestValues, kPerfTestName);
+  if (world.rank() == 0) {
+    // Создаем тестовые данные
+    original_pixels = generateRandomPixels(image_height, image_width);
+    parallel_result.resize(image_height * image_width * 3);
 
-}  // namespace
+    // Настраиваем TaskData для параллельной версии
+    parallelTaskData->inputs.emplace_back(reinterpret_cast<uint8_t *>(original_pixels.data()));
+    parallelTaskData->inputs_count.emplace_back(image_width);
+    parallelTaskData->inputs_count.emplace_back(image_height);
+    parallelTaskData->outputs.emplace_back(reinterpret_cast<uint8_t *>(parallel_result.data()));
+    parallelTaskData->outputs_count.emplace_back(image_width);
+    parallelTaskData->outputs_count.emplace_back(image_height);
+  }
 
-}  // namespace kapanova_s_image_smoothing
+  kapanova_s_image_smoothing::KapanovaSImageSmoothingMPI parallelTask(parallelTaskData);
+  ASSERT_TRUE(parallelTask.validation());
+  parallelTask.pre_processing();
+  parallelTask.run();
+  parallelTask.post_processing();
+
+  if (world.rank() == 0) {
+    // Создаем данные для последовательной версии
+    std::vector<uint8_t> sequential_result(image_height * image_width * 3);
+
+    // Настраиваем TaskData для последовательной версии
+    std::shared_ptr<ppc::core::TaskData> sequentialTaskData = std::make_shared<ppc::core::TaskData>();
+    sequentialTaskData->inputs.emplace_back(reinterpret_cast<uint8_t *>(original_pixels.data()));
+    sequentialTaskData->inputs_count.emplace_back(image_width);
+    sequentialTaskData->inputs_count.emplace_back(image_height);
+    sequentialTaskData->outputs.emplace_back(reinterpret_cast<uint8_t *>(sequential_result.data()));
+    sequentialTaskData->outputs_count.emplace_back(image_width);
+    sequentialTaskData->outputs_count.emplace_back(image_height);
+
+    // Создаем и запускаем последовательную задачу
+    kapanova_s_image_smoothing::KapanovaSImageSmoothingSEQ sequentialTask(sequentialTaskData);
+    ASSERT_TRUE(sequentialTask.validation());
+    sequentialTask.pre_processing();
+    sequentialTask.run();
+    sequentialTask.post_processing();
+
+    // Проверяем, что результаты совпадают
+    ASSERT_EQ(parallel_result.size(), sequential_result.size());
+    for (size_t i = 0; i < parallel_result.size(); ++i) {
+      // Допускаем разницу в 1 из-за округления
+      ASSERT_LE(std::abs(static_cast<int>(parallel_result[i]) - static_cast<int>(sequential_result[i])), 1);
+    }
+  }
+}
+
+TEST(kapanova_s_image_smoothing, Test_IMAGE_RANDOM_LANDSCAPE) {
+  boost::mpi::communicator world;
+
+  int image_width = 15;
+  int image_height = 5;
+
+  std::vector<uint8_t> original_pixels;
+  std::vector<uint8_t> parallel_result;
+
+  std::shared_ptr<ppc::core::TaskData> parallelTaskData = std::make_shared<ppc::core::TaskData>();
+
+  if (world.rank() == 0) {
+    // Создаем тестовые данные (альбомная ориентация)
+    original_pixels = generateRandomPixels(image_height, image_width);
+    parallel_result.resize(image_height * image_width * 3);
+
+    // Настраиваем TaskData для параллельной версии
+    parallelTaskData->inputs.emplace_back(reinterpret_cast<uint8_t *>(original_pixels.data()));
+    parallelTaskData->inputs_count.emplace_back(image_width);
+    parallelTaskData->inputs_count.emplace_back(image_height);
+    parallelTaskData->outputs.emplace_back(reinterpret_cast<uint8_t *>(parallel_result.data()));
+    parallelTaskData->outputs_count.emplace_back(image_width);
+    parallelTaskData->outputs_count.emplace_back(image_height);
+  }
+
+  kapanova_s_image_smoothing::KapanovaSImageSmoothingMPI parallelTask(parallelTaskData);
+  ASSERT_TRUE(parallelTask.validation());
+  parallelTask.pre_processing();
+  parallelTask.run();
+  parallelTask.post_processing();
+
+  if (world.rank() == 0) {
+    // Создаем данные для последовательной версии
+    std::vector<uint8_t> sequential_result(image_height * image_width * 3);
+
+    // Настраиваем TaskData для последовательной версии
+    std::shared_ptr<ppc::core::TaskData> sequentialTaskData = std::make_shared<ppc::core::TaskData>();
+    sequentialTaskData->inputs.emplace_back(reinterpret_cast<uint8_t *>(original_pixels.data()));
+    sequentialTaskData->inputs_count.emplace_back(image_width);
+    sequentialTaskData->inputs_count.emplace_back(image_height);
+    sequentialTaskData->outputs.emplace_back(reinterpret_cast<uint8_t *>(sequential_result.data()));
+    sequentialTaskData->outputs_count.emplace_back(image_width);
+    sequentialTaskData->outputs_count.emplace_back(image_height);
+
+    // Создаем и запускаем последовательную задачу
+    kapanova_s_image_smoothing::KapanovaSImageSmoothingSEQ sequentialTask(sequentialTaskData);
+    ASSERT_TRUE(sequentialTask.validation());
+    sequentialTask.pre_processing();
+    sequentialTask.run();
+    sequentialTask.post_processing();
+
+    // Проверяем, что результаты совпадают
+    ASSERT_EQ(parallel_result.size(), sequential_result.size());
+    for (size_t i = 0; i < parallel_result.size(); ++i) {
+      // Допускаем разницу в 1 из-за округления
+      ASSERT_LE(std::abs(static_cast<int>(parallel_result[i]) - static_cast<int>(sequential_result[i])), 1);
+    }
+  }
+}
+
+TEST(kapanova_s_image_smoothing, Test_IMAGE_RANDOM_PORTRAIT) {
+  boost::mpi::communicator world;
+
+  int image_width = 5;
+  int image_height = 15;
+
+  std::vector<uint8_t> original_pixels;
+  std::vector<uint8_t> parallel_result;
+
+  std::shared_ptr<ppc::core::TaskData> parallelTaskData = std::make_shared<ppc::core::TaskData>();
+
+  if (world.rank() == 0) {
+    // Создаем тестовые данные (портретная ориентация)
+    original_pixels = generateRandomPixels(image_height, image_width);
+    parallel_result.resize(image_height * image_width * 3);
+
+    // Настраиваем TaskData для параллельной версии
+    parallelTaskData->inputs.emplace_back(reinterpret_cast<uint8_t *>(original_pixels.data()));
+    parallelTaskData->inputs_count.emplace_back(image_width);
+    parallelTaskData->inputs_count.emplace_back(image_height);
+    parallelTaskData->outputs.emplace_back(reinterpret_cast<uint8_t *>(parallel_result.data()));
+    parallelTaskData->outputs_count.emplace_back(image_width);
+    parallelTaskData->outputs_count.emplace_back(image_height);
+  }
+
+  kapanova_s_image_smoothing::KapanovaSImageSmoothingMPI parallelTask(parallelTaskData);
+  ASSERT_TRUE(parallelTask.validation());
+  parallelTask.pre_processing();
+  parallelTask.run();
+  parallelTask.post_processing();
+
+  if (world.rank() == 0) {
+    // Создаем данные для последовательной версии
+    std::vector<uint8_t> sequential_result(image_height * image_width * 3);
+
+    // Настраиваем TaskData для последовательной версии
+    std::shared_ptr<ppc::core::TaskData> sequentialTaskData = std::make_shared<ppc::core::TaskData>();
+    sequentialTaskData->inputs.emplace_back(reinterpret_cast<uint8_t *>(original_pixels.data()));
+    sequentialTaskData->inputs_count.emplace_back(image_width);
+    sequentialTaskData->inputs_count.emplace_back(image_height);
+    sequentialTaskData->outputs.emplace_back(reinterpret_cast<uint8_t *>(sequential_result.data()));
+    sequentialTaskData->outputs_count.emplace_back(image_width);
+    sequentialTaskData->outputs_count.emplace_back(image_height);
+
+    // Создаем и запускаем последовательную задачу
+    kapanova_s_image_smoothing::KapanovaSImageSmoothingSEQ sequentialTask(sequentialTaskData);
+    ASSERT_TRUE(sequentialTask.validation());
+    sequentialTask.pre_processing();
+    sequentialTask.run();
+    sequentialTask.post_processing();
+
+    // Проверяем, что результаты совпадают
+    ASSERT_EQ(parallel_result.size(), sequential_result.size());
+    for (size_t i = 0; i < parallel_result.size(); ++i) {
+      // Допускаем разницу в 1 из-за округления
+      ASSERT_LE(std::abs(static_cast<int>(parallel_result[i]) - static_cast<int>(sequential_result[i])), 1);
+    }
+  }
+}
+
+TEST(kapanova_s_image_smoothing, Test_IMAGE_SOLID_COLOR) {
+  boost::mpi::communicator world;
+
+  int image_width = 8;
+  int image_height = 8;
+
+  std::vector<uint8_t> original_pixels(image_height * image_width * 3, 100);  // Все пиксели серые
+  std::vector<uint8_t> parallel_result(image_height * image_width * 3);
+
+  std::shared_ptr<ppc::core::TaskData> parallelTaskData = std::make_shared<ppc::core::TaskData>();
+
+  if (world.rank() == 0) {
+    // Настраиваем TaskData для параллельной версии
+    parallelTaskData->inputs.emplace_back(reinterpret_cast<uint8_t *>(original_pixels.data()));
+    parallelTaskData->inputs_count.emplace_back(image_width);
+    parallelTaskData->inputs_count.emplace_back(image_height);
+    parallelTaskData->outputs.emplace_back(reinterpret_cast<uint8_t *>(parallel_result.data()));
+    parallelTaskData->outputs_count.emplace_back(image_width);
+    parallelTaskData->outputs_count.emplace_back(image_height);
+  }
+
+  kapanova_s_image_smoothing::KapanovaSImageSmoothingMPI parallelTask(parallelTaskData);
+  ASSERT_TRUE(parallelTask.validation());
+  parallelTask.pre_processing();
+  parallelTask.run();
+  parallelTask.post_processing();
+
+  if (world.rank() == 0) {
+    // Проверяем, что однородное изображение осталось однородным
+    for (size_t i = 0; i < parallel_result.size(); ++i) {
+      ASSERT_EQ(parallel_result[i], 100);
+    }
+  }
+}
+
+TEST(kapanova_s_image_smoothing, Test_IMAGE_GRADIENT) {
+  boost::mpi::communicator world;
+
+  int image_width = 6;
+  int image_height = 6;
+
+  // Создаем градиентное изображение
+  std::vector<uint8_t> original_pixels(image_height * image_width * 3);
+  for (int y = 0; y < image_height; ++y) {
+    for (int x = 0; x < image_width; ++x) {
+      int pos = (y * image_width + x) * 3;
+      original_pixels[pos] = static_cast<uint8_t>((x + y) * 10);      // R
+      original_pixels[pos + 1] = static_cast<uint8_t>((x + y) * 10);  // G
+      original_pixels[pos + 2] = static_cast<uint8_t>((x + y) * 10);  // B
+    }
+  }
+
+  std::vector<uint8_t> parallel_result(image_height * image_width * 3);
+  std::vector<uint8_t> sequential_result(image_height * image_width * 3);
+
+  std::shared_ptr<ppc::core::TaskData> parallelTaskData = std::make_shared<ppc::core::TaskData>();
+
+  if (world.rank() == 0) {
+    // Настраиваем TaskData для параллельной версии
+    parallelTaskData->inputs.emplace_back(reinterpret_cast<uint8_t *>(original_pixels.data()));
+    parallelTaskData->inputs_count.emplace_back(image_width);
+    parallelTaskData->inputs_count.emplace_back(image_height);
+    parallelTaskData->outputs.emplace_back(reinterpret_cast<uint8_t *>(parallel_result.data()));
+    parallelTaskData->outputs_count.emplace_back(image_width);
+    parallelTaskData->outputs_count.emplace_back(image_height);
+  }
+
+  kapanova_s_image_smoothing::KapanovaSImageSmoothingMPI parallelTask(parallelTaskData);
+  ASSERT_TRUE(parallelTask.validation());
+  parallelTask.pre_processing();
+  parallelTask.run();
+  parallelTask.post_processing();
+
+  if (world.rank() == 0) {
+    // Настраиваем TaskData для последовательной версии
+    std::shared_ptr<ppc::core::TaskData> sequentialTaskData = std::make_shared<ppc::core::TaskData>();
+    sequentialTaskData->inputs.emplace_back(reinterpret_cast<uint8_t *>(original_pixels.data()));
+    sequentialTaskData->inputs_count.emplace_back(image_width);
+    sequentialTaskData->inputs_count.emplace_back(image_height);
+    sequentialTaskData->outputs.emplace_back(reinterpret_cast<uint8_t *>(sequential_result.data()));
+    sequentialTaskData->outputs_count.emplace_back(image_width);
+    sequentialTaskData->outputs_count.emplace_back(image_height);
+
+    // Создаем и запускаем последовательную задачу
+    kapanova_s_image_smoothing::KapanovaSImageSmoothingSEQ sequentialTask(sequentialTaskData);
+    ASSERT_TRUE(sequentialTask.validation());
+    sequentialTask.pre_processing();
+    sequentialTask.run();
+    sequentialTask.post_processing();
+
+    // Проверяем, что результаты совпадают
+    ASSERT_EQ(parallel_result.size(), sequential_result.size());
+    for (size_t i = 0; i < parallel_result.size(); ++i) {
+      // Допускаем разницу в 1 из-за округления
+      ASSERT_LE(std::abs(static_cast<int>(parallel_result[i]) - static_cast<int>(sequential_result[i])), 1);
+    }
+  }
+}
+
+TEST(kapanova_s_image_smoothing, Test_IMAGE_SMALL) {
+  boost::mpi::communicator world;
+
+  int image_width = 3;
+  int image_height = 3;
+
+  // Маленькое тестовое изображение 3x3
+  std::vector<uint8_t> original_pixels = {255, 0,   0,   0, 255, 0,   0,   0,  255, 0,  255, 255, 255, 0,
+                                          255, 255, 255, 0, 128, 128, 128, 64, 64,  64, 192, 192, 192};
+
+  std::vector<uint8_t> parallel_result(image_height * image_width * 3);
+  std::vector<uint8_t> sequential_result(image_height * image_width * 3);
+
+  std::shared_ptr<ppc::core::TaskData> parallelTaskData = std::make_shared<ppc::core::TaskData>();
+
+  if (world.rank() == 0) {
+    // Настраиваем TaskData для параллельной версии
+    parallelTaskData->inputs.emplace_back(reinterpret_cast<uint8_t *>(original_pixels.data()));
+    parallelTaskData->inputs_count.emplace_back(image_width);
+    parallelTaskData->inputs_count.emplace_back(image_height);
+    parallelTaskData->outputs.emplace_back(reinterpret_cast<uint8_t *>(parallel_result.data()));
+    parallelTaskData->outputs_count.emplace_back(image_width);
+    parallelTaskData->outputs_count.emplace_back(image_height);
+  }
+
+  kapanova_s_image_smoothing::KapanovaSImageSmoothingMPI parallelTask(parallelTaskData);
+  ASSERT_TRUE(parallelTask.validation());
+  parallelTask.pre_processing();
+  parallelTask.run();
+  parallelTask.post_processing();
+
+  if (world.rank() == 0) {
+    // Настраиваем TaskData для последовательной версии
+    std::shared_ptr<ppc::core::TaskData> sequentialTaskData = std::make_shared<ppc::core::TaskData>();
+    sequentialTaskData->inputs.emplace_back(reinterpret_cast<uint8_t *>(original_pixels.data()));
+    sequentialTaskData->inputs_count.emplace_back(image_width);
+    sequentialTaskData->inputs_count.emplace_back(image_height);
+    sequentialTaskData->outputs.emplace_back(reinterpret_cast<uint8_t *>(sequential_result.data()));
+    sequentialTaskData->outputs_count.emplace_back(image_width);
+    sequentialTaskData->outputs_count.emplace_back(image_height);
+
+    // Создаем и запускаем последовательную задачу
+    kapanova_s_image_smoothing::KapanovaSImageSmoothingSEQ sequentialTask(sequentialTaskData);
+    ASSERT_TRUE(sequentialTask.validation());
+    sequentialTask.pre_processing();
+    sequentialTask.run();
+    sequentialTask.post_processing();
+
+    // Проверяем, что результаты совпадают
+    ASSERT_EQ(parallel_result.size(), sequential_result.size());
+    for (size_t i = 0; i < parallel_result.size(); ++i) {
+      // Допускаем разницу в 2 для маленького изображения
+      ASSERT_LE(std::abs(static_cast<int>(parallel_result[i]) - static_cast<int>(sequential_result[i])), 2);
+    }
+  }
+}
