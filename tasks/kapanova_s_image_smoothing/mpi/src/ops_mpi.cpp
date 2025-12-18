@@ -20,232 +20,194 @@ bool KapanovaSImageSmoothingMPI::ValidationImpl() {
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
   auto &input = GetInput();
-
-  // Процесс 0 проверяет данные
+  
   if (rank == 0) {
-    if (input.width <= 0 || input.height <= 0 || input.kernel_size <= 0) {
+    if (input.width <= 0 || input.height <= 0) {
       return false;
     }
-
-    if (input.kernel_size % 2 == 0) {
-      return false;  // Ядро должно быть нечетного размера
-    }
-
+    
     if (input.pixels.size() != static_cast<size_t>(input.width) * input.height) {
       return false;
     }
   }
-
-  // Рассылаем результат проверки всем процессам
-  int valid = 1;
-  if (rank == 0) {
-    valid = 1;  // Если дошли сюда, данные валидны
-  }
-  MPI_Bcast(&valid, 1, MPI_INT, 0, MPI_COMM_WORLD);
-
-  return valid == 1;
+  
+  int width = input.width;
+  int height = input.height;
+  MPI_Bcast(&width, 1, MPI_INT, 0, MPI_COMM_WORLD);
+  MPI_Bcast(&height, 1, MPI_INT, 0, MPI_COMM_WORLD);
+  
+  GetInput().width = width;
+  GetInput().height = height;
+  
+  return true;
 }
 
 bool KapanovaSImageSmoothingMPI::PreProcessingImpl() {
   auto &output = GetOutput();
-  output = GetInput();  // Копируем метаданные
-
-  // На процессе 0 выделяем память для результата
+  output = GetInput();
+  
   int rank = 0;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
+  
   if (rank == 0) {
     output.pixels.resize(static_cast<size_t>(output.width) * output.height);
   }
-
+  
   return true;
 }
 
-std::vector<float> KapanovaSImageSmoothingMPI::CreateGaussianKernel() {
-  const auto &input = GetInput();
-  const int kernel_radius = input.kernel_size / 2;
-  const int kernel_size = input.kernel_size;
-  const float sigma = 1.5f;
-
-  std::vector<float> kernel(kernel_size * kernel_size);
-  float sum = 0.0f;
-
-  for (int y = -kernel_radius; y <= kernel_radius; ++y) {
-    for (int x = -kernel_radius; x <= kernel_radius; ++x) {
-      const float value = std::exp(-(x * x + y * y) / (2 * sigma * sigma));
-      kernel[(y + kernel_radius) * kernel_size + (x + kernel_radius)] = value;
-      sum += value;
-    }
+std::vector<float> KapanovaSImageSmoothingMPI::create_gaussian_kernel(int radius, float sigma) {
+  int size = 2 * radius + 1;
+  std::vector<float> kernel(size);
+  float norm = 0.0f;
+  
+  for (int i = -radius; i <= radius; ++i) {
+    kernel[i + radius] = std::exp(-(i * i) / (2 * sigma * sigma));
+    norm += kernel[i + radius];
   }
-
-  // Нормализуем
-  for (float &value : kernel) {
-    value /= sum;
+  
+  for (float& val : kernel) {
+    val /= norm;
   }
-
+  
   return kernel;
 }
 
-uint8_t KapanovaSImageSmoothingMPI::ApplyGaussianFilter(int x, int y, const std::vector<uint8_t> &local_data,
-                                                        int local_width, int local_height, int offset_row,
-                                                        const std::vector<float> &kernel) {
-  const auto &input = GetInput();
-  const int kernel_radius = input.kernel_size / 2;
-  const int kernel_size = input.kernel_size;
-
-  float result = 0.0f;
-
-  for (int ky = -kernel_radius; ky <= kernel_radius; ++ky) {
-    for (int kx = -kernel_radius; kx <= kernel_radius; ++kx) {
-      const int neighbor_x = x + kx;
-      const int neighbor_y = y + ky;
-
-      // Проверяем границы исходного изображения
-      if (neighbor_x >= 0 && neighbor_x < input.width && neighbor_y >= 0 && neighbor_y < input.height) {
-        // Вычисляем индекс в локальных данных
-        const int local_y = neighbor_y - offset_row;
-        if (local_y >= 0 && local_y < local_height) {
-          const int local_idx = local_y * local_width + neighbor_x;
-          const float weight = kernel[(ky + kernel_radius) * kernel_size + (kx + kernel_radius)];
-          result += local_data[local_idx] * weight;
-        }
+void KapanovaSImageSmoothingMPI::convolve_rows(const std::vector<uint8_t>& input, int height, int width,
+                                              const std::vector<float>& kernel, std::vector<float>& temp) {
+  int kernel_radius = static_cast<int>(kernel.size()) / 2;
+  
+  for (int y = 0; y < height; ++y) {
+    for (int x = 0; x < width; ++x) {
+      float sum = 0.0f;
+      for (int k = -kernel_radius; k <= kernel_radius; ++k) {
+        int pixel_x = std::clamp(x + k, 0, width - 1);
+        sum += input[y * width + pixel_x] * kernel[k + kernel_radius];
       }
+      temp[y * width + x] = sum;
     }
   }
+}
 
-  return static_cast<uint8_t>(std::clamp(static_cast<int>(std::round(result)), 0, 255));
+void KapanovaSImageSmoothingMPI::convolve_columns(const std::vector<float>& temp, int height, int width,
+                                                 const std::vector<float>& kernel, std::vector<uint8_t>& output) {
+  int kernel_radius = static_cast<int>(kernel.size()) / 2;
+  
+  for (int y = 0; y < height; ++y) {
+    for (int x = 0; x < width; ++x) {
+      float sum = 0.0f;
+      for (int k = -kernel_radius; k <= kernel_radius; ++k) {
+        int pixel_y = std::clamp(y + k, 0, height - 1);
+        sum += temp[pixel_y * width + x] * kernel[k + kernel_radius];
+      }
+      output[y * width + x] = static_cast<uint8_t>(std::clamp(static_cast<int>(std::round(sum)), 0, 255));
+    }
+  }
 }
 
 bool KapanovaSImageSmoothingMPI::RunImpl() {
   int rank = 0, size = 0;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   MPI_Comm_size(MPI_COMM_WORLD, &size);
-
+  
   const auto &input = GetInput();
   auto &output = GetOutput();
-
+  
   const int width = input.width;
   const int height = input.height;
-  const int kernel_radius = input.kernel_size / 2;
-
-  // Создаем Гауссово ядро
-  std::vector<float> kernel;
-  if (rank == 0) {
-    kernel = CreateGaussianKernel();
-  }
-
-  // Рассылаем размеры ядра и само ядро
-  int kernel_size = input.kernel_size;
-  MPI_Bcast(&kernel_size, 1, MPI_INT, 0, MPI_COMM_WORLD);
-
-  if (rank != 0) {
-    kernel.resize(kernel_size * kernel_size);
-  }
-  MPI_Bcast(kernel.data(), kernel_size * kernel_size, MPI_FLOAT, 0, MPI_COMM_WORLD);
-
-  // Распределяем строки между процессами
-  const int rows_per_proc = height / size;
-  const int remainder = height % size;
-
-  // Вычисляем диапазон строк для каждого процесса
-  int start_row = rank * rows_per_proc + std::min(rank, remainder);
-  int end_row = start_row + rows_per_proc + (rank < remainder ? 1 : 0);
-  int local_rows = end_row - start_row;
-
-  // Добавляем halo области для корректной обработки границ
-  int halo_start = std::max(0, start_row - kernel_radius);
-  int halo_end = std::min(height, end_row + kernel_radius);
-  int halo_rows = halo_end - halo_start;
-
-  // Подготавливаем данные для Scatterv
-  std::vector<int> send_counts(size, 0);
-  std::vector<int> displacements(size, 0);
-
-  if (rank == 0) {
-    for (int proc = 0; proc < size; ++proc) {
-      int proc_start = proc * rows_per_proc + std::min(proc, remainder);
-      int proc_end = proc_start + rows_per_proc + (proc < remainder ? 1 : 0);
-
-      int proc_halo_start = std::max(0, proc_start - kernel_radius);
-      int proc_halo_end = std::min(height, proc_end + kernel_radius);
-      int proc_halo_rows = proc_halo_end - proc_halo_start;
-
-      send_counts[proc] = proc_halo_rows * width;
-      displacements[proc] = proc_halo_start * width;
-    }
-  }
-
-  // Распределяем данные
-  std::vector<uint8_t> local_data(halo_rows * width);
-  MPI_Scatterv(rank == 0 ? input.pixels.data() : nullptr, send_counts.data(), displacements.data(), MPI_UNSIGNED_CHAR,
-               local_data.data(), halo_rows * width, MPI_UNSIGNED_CHAR, 0, MPI_COMM_WORLD);
-
-  // Если у процесса нет строк для обработки
-  if (local_rows <= 0) {
-    // Отправляем пустые данные для сбора
-    std::vector<int> recv_counts(size, 0);
-    std::vector<int> recv_displacements(size, 0);
-
-    if (rank == 0) {
-      for (int proc = 0; proc < size; ++proc) {
-        int proc_start = proc * rows_per_proc + std::min(proc, remainder);
-        int proc_end = proc_start + rows_per_proc + (proc < remainder ? 1 : 0);
-        int proc_rows = proc_end - proc_start;
-
-        recv_counts[proc] = proc_rows * width;
-        recv_displacements[proc] = proc_start * width;
-      }
-    }
-
-    MPI_Gatherv(nullptr, 0, MPI_UNSIGNED_CHAR, rank == 0 ? output.pixels.data() : nullptr, recv_counts.data(),
-                recv_displacements.data(), MPI_UNSIGNED_CHAR, 0, MPI_COMM_WORLD);
-
+  const int radius = 1;
+  const float sigma = 1.5f;
+  
+  std::vector<float> horizontal_kernel = create_gaussian_kernel(radius, sigma);
+  const std::vector<float>& vertical_kernel = horizontal_kernel;
+  
+  if (size == 1) {
+    std::vector<float> temp(width * height, 0.0f);
+    convolve_rows(input.pixels, height, width, horizontal_kernel, temp);
+    convolve_columns(temp, height, width, vertical_kernel, output.pixels);
     return true;
   }
-
-  // Обрабатываем локальные данные
-  std::vector<uint8_t> local_result(local_rows * width);
-
-  for (int local_y = 0; local_y < local_rows; ++local_y) {
-    const int global_y = start_row + local_y;
-
-    for (int x = 0; x < width; ++x) {
-      local_result[local_y * width + x] =
-          ApplyGaussianFilter(x, global_y, local_data, width, halo_rows, halo_start, kernel);
+  
+  int base_height = height / size;
+  int remainder = height % size;
+  
+  std::vector<int> send_counts(size, 0);
+  std::vector<int> displacements(size, 0);
+  
+  if (rank == 0) {
+    int current_displacement = 0;
+    for (int proc = 0; proc < size; ++proc) {
+      int proc_height = base_height + (proc < remainder ? 1 : 0);
+      
+      int halo_top = (proc == 0) ? 0 : 1;
+      int halo_bottom = (proc == size - 1) ? 0 : 1;
+      
+      send_counts[proc] = (proc_height + halo_top + halo_bottom) * width;
+      displacements[proc] = current_displacement * width;
+      
+      if (proc == 0) {
+        current_displacement += (proc_height + halo_bottom);
+      } else {
+        current_displacement += proc_height;
+      }
     }
   }
-
-  // Собираем результаты
+  
+  int local_height_with_halo = 0;
+  if (rank == 0) {
+    local_height_with_halo = send_counts[rank] / width;
+  }
+  MPI_Bcast(&local_height_with_halo, 1, MPI_INT, 0, MPI_COMM_WORLD);
+  
+  std::vector<uint8_t> local_input(local_height_with_halo * width);
+  std::vector<int> all_send_counts = send_counts;
+  std::vector<int> all_displacements = displacements;
+  
+  MPI_Scatterv(rank == 0 ? input.pixels.data() : nullptr,
+               all_send_counts.data(), all_displacements.data(), MPI_UNSIGNED_CHAR,
+               local_input.data(), local_height_with_halo * width, MPI_UNSIGNED_CHAR,
+               0, MPI_COMM_WORLD);
+  
+  int halo_top = (rank == 0) ? 0 : 1;
+  int halo_bottom = (rank == size - 1) ? 0 : 1;
+  int local_height = local_height_with_halo - halo_top - halo_bottom;
+  
+  std::vector<float> local_temp(local_height_with_halo * width, 0.0f);
+  std::vector<uint8_t> local_output(local_height * width);
+  
+  convolve_rows(local_input, local_height_with_halo, width, horizontal_kernel, local_temp);
+  convolve_columns(local_temp, local_height_with_halo, width, vertical_kernel, local_output);
+  
   std::vector<int> recv_counts(size, 0);
   std::vector<int> recv_displacements(size, 0);
-
+  
   if (rank == 0) {
+    int current_displacement = 0;
     for (int proc = 0; proc < size; ++proc) {
-      int proc_start = proc * rows_per_proc + std::min(proc, remainder);
-      int proc_end = proc_start + rows_per_proc + (proc < remainder ? 1 : 0);
-      int proc_rows = proc_end - proc_start;
-
-      recv_counts[proc] = proc_rows * width;
-      recv_displacements[proc] = proc_start * width;
+      int proc_height = base_height + (proc < remainder ? 1 : 0);
+      recv_counts[proc] = proc_height * width;
+      recv_displacements[proc] = current_displacement * width;
+      current_displacement += proc_height;
     }
   }
-
-  MPI_Gatherv(local_result.data(), local_rows * width, MPI_UNSIGNED_CHAR, rank == 0 ? output.pixels.data() : nullptr,
-              recv_counts.data(), recv_displacements.data(), MPI_UNSIGNED_CHAR, 0, MPI_COMM_WORLD);
-
+  
+  MPI_Gatherv(local_output.data(), local_height * width, MPI_UNSIGNED_CHAR,
+              rank == 0 ? output.pixels.data() : nullptr,
+              recv_counts.data(), recv_displacements.data(), MPI_UNSIGNED_CHAR,
+              0, MPI_COMM_WORLD);
+  
   return true;
 }
 
 bool KapanovaSImageSmoothingMPI::PostProcessingImpl() {
   int rank = 0;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
+  
   if (rank == 0) {
     auto &output = GetOutput();
-    // Проверяем, что результат имеет правильный размер
     return output.pixels.size() == static_cast<size_t>(output.width) * output.height;
   }
-
+  
   return true;
 }
 

@@ -17,11 +17,12 @@ class KapanovaSImageSmoothingMPI : public BaseTask {
   bool PreProcessingImpl() override;
   bool RunImpl() override;
   bool PostProcessingImpl() override;
-
-  // Вспомогательные функции для Гауссова ядра
-  std::vector<float> CreateGaussianKernel();
-  uint8_t ApplyGaussianFilter(int x, int y, const std::vector<uint8_t> &local_data, int local_width, int local_height,
-                              int offset_row, const std::vector<float> &kernel);
+  
+  static std::vector<float> create_gaussian_kernel(int radius, float sigma);
+  static void convolve_rows(const std::vector<uint8_t>& input, int height, int width, 
+                           const std::vector<float>& kernel, std::vector<float>& temp);
+  static void convolve_columns(const std::vector<float>& temp, int height, int width,
+                              const std::vector<float>& kernel, std::vector<uint8_t>& output);
 };
 
 }  // namespace kapanova_s_image_smoothing
