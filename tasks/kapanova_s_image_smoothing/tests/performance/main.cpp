@@ -17,17 +17,17 @@ class KapanovaSImageSmoothingPerfTests : public ppc::util::BaseRunPerfTests<InTy
   const int kWidth = 2048;
   const int kHeight = 2048;
   const int kKernelSize = 5;
-  
+
   InType input_data_;
 
   void SetUp() override {
     input_data_.width = kWidth;
     input_data_.height = kHeight;
     input_data_.kernel_size = kKernelSize;
-    
+
     const size_t total_pixels = static_cast<size_t>(kWidth) * kHeight;
     input_data_.pixels.resize(total_pixels);
-    
+
     // Заполняем тестовыми данными
     for (size_t i = 0; i < total_pixels; ++i) {
       input_data_.pixels[i] = static_cast<uint8_t>((i * 13) % 256);
@@ -37,7 +37,7 @@ class KapanovaSImageSmoothingPerfTests : public ppc::util::BaseRunPerfTests<InTy
   bool CheckTestOutputData(OutType &output_data) final {
     int rank = 0;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    
+
     // Для MPI: на процессе 0 проверяем результат, на других процессах
     // только проверяем, что метаданные корректны
     if (rank == 0) {
@@ -45,29 +45,27 @@ class KapanovaSImageSmoothingPerfTests : public ppc::util::BaseRunPerfTests<InTy
       if (output_data.pixels.size() != static_cast<size_t>(kWidth) * kHeight) {
         return false;
       }
-      
+
       // Проверяем, что результат не пустой и содержит данные
       // (не проверяем диапазон, так как uint8_t всегда в диапазоне 0-255)
       if (output_data.pixels.empty()) {
         return false;
       }
-      
+
       // Проверяем, что не все значения одинаковы (простая эвристика)
       // Это гарантирует, что алгоритм что-то сделал
       const uint8_t first_value = output_data.pixels[0];
-      bool all_same = std::ranges::all_of(output_data.pixels, 
-                                         [first_value](uint8_t val) { return val == first_value; });
-      
+      bool all_same =
+          std::ranges::all_of(output_data.pixels, [first_value](uint8_t val) { return val == first_value; });
+
       // Если все значения одинаковые, возможно алгоритм не работает
       // Но в случае однородного изображения это может быть нормально
       // Поэтому просто возвращаем true, если размер правильный
       return true;
-      
+
     } else {
       // На других процессах проверяем только метаданные
-      return output_data.width == kWidth && 
-             output_data.height == kHeight && 
-             output_data.kernel_size == kKernelSize;
+      return output_data.width == kWidth && output_data.height == kHeight && output_data.kernel_size == kKernelSize;
     }
   }
 
@@ -80,8 +78,7 @@ TEST_P(KapanovaSImageSmoothingPerfTests, RunPerfModes) {
   ExecuteTest(GetParam());
 }
 
-const auto kAllPerfTasks = 
-  ppc::util::MakeAllPerfTasks<InType, KapanovaSImageSmoothingMPI, KapanovaSImageSmoothingSEQ>(
+const auto kAllPerfTasks = ppc::util::MakeAllPerfTasks<InType, KapanovaSImageSmoothingMPI, KapanovaSImageSmoothingSEQ>(
     PPC_SETTINGS_kapanova_s_image_smoothing);
 
 const auto kGtestValues = ppc::util::TupleToGTestValues(kAllPerfTasks);
