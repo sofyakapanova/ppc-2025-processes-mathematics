@@ -23,6 +23,10 @@ class KapanovaSImageSmoothingMPI : public BaseTask {
                             std::vector<float> &temp);
   static void convolve_columns(const std::vector<float> &temp, int height, int width, const std::vector<float> &kernel,
                                std::vector<uint8_t> &output);
+
+  // Добавляем поля для хранения размеров
+  int width_{0};
+  int height_{0};
 };
 
 }  // namespace kapanova_s_image_smoothing

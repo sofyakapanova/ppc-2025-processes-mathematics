@@ -33,8 +33,6 @@ bool KapanovaSImageSmoothingSEQ::PreProcessingImpl() {
   height_ = input.height;
 
   input_ = input.pixels;
-
-  GetOutput() = input;
   output_.resize(input_.size());
 
   return true;
@@ -42,14 +40,12 @@ bool KapanovaSImageSmoothingSEQ::PreProcessingImpl() {
 
 std::vector<float> KapanovaSImageSmoothingSEQ::create_gaussian_kernel(int radius, float sigma) {
   int size = 2 * radius + 1;
-  std::vector<float> kernel(size * size);
+  std::vector<float> kernel(size);
   float norm = 0.0f;
 
   for (int i = -radius; i <= radius; ++i) {
-    for (int j = -radius; j <= radius; ++j) {
-      kernel[(i + radius) * size + (j + radius)] = std::exp(-(i * i + j * j) / (2 * sigma * sigma));
-      norm += kernel[(i + radius) * size + (j + radius)];
-    }
+    kernel[i + radius] = std::exp(-(i * i) / (2 * sigma * sigma));
+    norm += kernel[i + radius];
   }
 
   for (float &val : kernel) {
@@ -61,7 +57,7 @@ std::vector<float> KapanovaSImageSmoothingSEQ::create_gaussian_kernel(int radius
 
 void KapanovaSImageSmoothingSEQ::convolve_rows(const std::vector<uint8_t> &input, int height, int width,
                                                const std::vector<float> &kernel, std::vector<float> &temp) {
-  int kernel_radius = 1;
+  int kernel_radius = static_cast<int>(kernel.size()) / 2;
 
   for (int y = 0; y < height; ++y) {
     for (int x = 0; x < width; ++x) {
@@ -77,7 +73,7 @@ void KapanovaSImageSmoothingSEQ::convolve_rows(const std::vector<uint8_t> &input
 
 void KapanovaSImageSmoothingSEQ::convolve_columns(const std::vector<float> &temp, int height, int width,
                                                   const std::vector<float> &kernel, std::vector<uint8_t> &output) {
-  int kernel_radius = 1;
+  int kernel_radius = static_cast<int>(kernel.size()) / 2;
 
   for (int y = 0; y < height; ++y) {
     for (int x = 0; x < width; ++x) {
@@ -95,12 +91,18 @@ bool KapanovaSImageSmoothingSEQ::RunImpl() {
   const int radius = 1;
   const float sigma = 1.5f;
 
+  // Создаем горизонтальное ядро Гаусса
   std::vector<float> horizontal_kernel = create_gaussian_kernel(radius, sigma);
+  // Вертикальное ядро такое же
   const std::vector<float> &vertical_kernel = horizontal_kernel;
 
+  // Временный буфер для промежуточных результатов
   std::vector<float> temp(width_ * height_, 0.0f);
 
+  // Применяем свертку по строкам
   convolve_rows(input_, height_, width_, horizontal_kernel, temp);
+
+  // Применяем свертку по столбцам
   convolve_columns(temp, height_, width_, vertical_kernel, output_);
 
   return true;
@@ -108,6 +110,10 @@ bool KapanovaSImageSmoothingSEQ::RunImpl() {
 
 bool KapanovaSImageSmoothingSEQ::PostProcessingImpl() {
   GetOutput().pixels = output_;
+  GetOutput().width = width_;
+  GetOutput().height = height_;
+  GetOutput().kernel_size = 3;  // Фиксированный размер ядра
+
   return true;
 }
 
