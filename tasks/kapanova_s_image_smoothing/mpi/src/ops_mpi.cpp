@@ -5,7 +5,7 @@
 #include <algorithm>
 #include <climits>
 #include <cmath>
-#include <cstddef>
+#include <cstdint>
 #include <vector>
 
 #include "kapanova_s_image_smoothing/common/include/common.hpp"
@@ -60,7 +60,7 @@ std::vector<float> KapanovaSImageSmoothingMPI::CreateKernel() const {
 
   for (int i = -radius_; i <= radius_; ++i) {
     for (int j = -radius_; j <= radius_; ++j) {
-      const size_t index = static_cast<size_t>(((i + radius_) * size) + j + radius_);
+      const auto index = static_cast<size_t>(((i + radius_) * size) + j + radius_);
       kernel_local[index] = std::exp(-(static_cast<float>((i * i) + (j * j))) / ((2.0F * kSigma) * kSigma));
       norm += kernel_local[index];
     }
@@ -75,7 +75,7 @@ std::vector<float> KapanovaSImageSmoothingMPI::CreateKernel() const {
 
 void KapanovaSImageSmoothingMPI::SmoothPixel(uint8_t *out, int x_coord, int y_coord) {
   const int stride = width_ * 3;
-  const auto size_k = static_cast<size_t>((2 * radius_) + 1);
+  constexpr int kSize = (2 * 1) + 1;  // radius_ = 1
   float out_r = 0.0F;
   float out_g = 0.0F;
   float out_b = 0.0F;
@@ -87,7 +87,7 @@ void KapanovaSImageSmoothingMPI::SmoothPixel(uint8_t *out, int x_coord, int y_co
       const int idx = clamp(x_coord + rx, 0, width_ - 1);
       const int idy = clamp(y_coord + ry, 0, height_ - 1);
       const int pos = (idy * stride) + (idx * 3);
-      const size_t kernel_pos = static_cast<size_t>((ry + radius_) * static_cast<int>(size_k) + rx + radius_);
+      const auto kernel_pos = static_cast<size_t>(((ry + radius_) * kSize) + rx + radius_);
 
       out_r += static_cast<float>(input_[static_cast<size_t>(pos)]) * kernel_[kernel_pos];
       out_g += static_cast<float>(input_[static_cast<size_t>(pos + 1)]) * kernel_[kernel_pos];
@@ -114,7 +114,8 @@ bool KapanovaSImageSmoothingMPI::RunImpl() {
   if (size == 1) {
     for (int y_coord = 0; y_coord < height_; ++y_coord) {
       for (int x_coord = 0; x_coord < width_; ++x_coord) {
-        SmoothPixel(&result_[static_cast<size_t>(y_coord * width_ * 3 + x_coord * 3)], x_coord, y_coord);
+        const auto pos = static_cast<size_t>(y_coord * width_ * 3 + x_coord * 3);
+        SmoothPixel(&result_[pos], x_coord, y_coord);
       }
     }
     return true;
@@ -151,7 +152,7 @@ bool KapanovaSImageSmoothingMPI::RunImpl() {
 
       for (int i = 0; i < processes_to_use; ++i) {
         const int result_row = row + i + 1;
-        if (result_row > 0 && result_row < height_ - 1) {
+        if ((result_row > 0) && (result_row < height_ - 1)) {
           const int result_pos = result_row * width_ * 3;
           MPI_Recv(&result_[static_cast<size_t>(result_pos)], width_ * 3, MPI_UNSIGNED_CHAR, i + 1, kTagResult,
                    MPI_COMM_WORLD, MPI_STATUS_IGNORE);
@@ -167,7 +168,8 @@ bool KapanovaSImageSmoothingMPI::RunImpl() {
 
     for (int x_coord = 0; x_coord < width_; ++x_coord) {
       SmoothPixel(&result_[static_cast<size_t>(x_coord * 3)], x_coord, 0);
-      SmoothPixel(&result_[static_cast<size_t>((height_ - 1) * width_ * 3 + x_coord * 3)], x_coord, height_ - 1);
+      const auto pos = static_cast<size_t>(((height_ - 1) * width_ * 3) + (x_coord * 3));
+      SmoothPixel(&result_[pos], x_coord, height_ - 1);
     }
 
   } else {
