@@ -1,131 +1,225 @@
 #include "kapanova_s_image_smoothing/mpi/include/ops_mpi.hpp"
 
+#include <mpi.h>
+
 #include <algorithm>
-#include <boost/mpi.hpp>
+#include <climits>
 #include <cmath>
 #include <vector>
 
 namespace kapanova_s_image_smoothing {
 
-KapanovaSImageSmoothingMPI::KapanovaSImageSmoothingMPI(const std::vector<std::vector<int>> &in) : mpi_communicator_() {
+KapanovaSImageSmoothingMPI::KapanovaSImageSmoothingMPI(const InType &in) {
   SetTypeOfTask(GetStaticTypeOfTask());
   GetInput() = in;
-  GetOutput() = in;
 }
 
 bool KapanovaSImageSmoothingMPI::ValidationImpl() {
-  const auto &matrix = GetInput();
-  if (matrix.empty()) {
-    return true;
-  }
-
-  const size_t cols = matrix[0].size();
-  return std::ranges::all_of(matrix, [cols](const auto &row) { return row.size() == cols; });
+  const auto &inputData = GetInput();
+  return !inputData.empty() && !inputData[0].empty();
 }
 
 bool KapanovaSImageSmoothingMPI::PreProcessingImpl() {
-  input_matrix_ = GetInput();
-  if (input_matrix_.empty()) {
-    return true;
+  const auto &inputData = GetInput();
+  if (inputData.empty() || inputData[0].size() < 4) {
+    return false;
   }
 
-  image_height_ = static_cast<int>(input_matrix_.size());
-  image_width_ = static_cast<int>(input_matrix_[0].size());
+  // Первые 4 элемента - ширина и высота (по 2 байта каждое)
+  const auto &data = inputData[0];
+  width = (data[1] << 8) | data[0];
+  height = (data[3] << 8) | data[2];
 
-  // Инициализируем выходную матрицу
-  output_matrix_.resize(image_height_);
-  for (int i = 0; i < image_height_; ++i) {
-    output_matrix_[i].resize(image_width_);
+  // Проверяем размер данных
+  size_t required_pixels = static_cast<size_t>(width) * static_cast<size_t>(height) * 3;
+  size_t total_required_size = 4 + required_pixels;
+
+  if (data.size() < total_required_size) {
+    return false;
   }
 
-  // Создаем гауссово ядро
-  createGaussianKernel();
+  input.assign(data.begin() + 4, data.end());
+  result = std::vector<uint8_t>(required_pixels);
+  kernel = CreateKernel();
 
   return true;
 }
 
-void KapanovaSImageSmoothingMPI::createGaussianKernel() {
-  const int kernel_radius = 1;
-  const int kernel_size = 2 * kernel_radius + 1;
-  gaussian_kernel_.resize(kernel_size * kernel_size);
+float *KapanovaSImageSmoothingMPI::CreateKernel() {
+  int size = 2 * radius + 1;
+  auto *kernel = new float[size * size]{0};
   float sigma = 1.5f;
-  float total_weight = 0.0f;
+  float norm = 0;
 
-  for (int i = -kernel_radius; i <= kernel_radius; ++i) {
-    for (int j = -kernel_radius; j <= kernel_radius; ++j) {
-      int idx = (i + kernel_radius) * kernel_size + (j + kernel_radius);
-      gaussian_kernel_[idx] = std::exp(-(i * i + j * j) / (2 * sigma * sigma));
-      total_weight += gaussian_kernel_[idx];
+  for (int i = -radius; i <= radius; i++) {
+    for (int j = -radius; j <= radius; j++) {
+      kernel[(i + radius) * size + j + radius] = std::exp(-(i * i + j * j) / (2 * sigma * sigma));
+      norm += kernel[(i + radius) * size + j + radius];
     }
   }
 
-  for (float &weight : gaussian_kernel_) {
-    weight /= total_weight;
+  for (int i = 0; i < size * size; i++) {
+    kernel[i] /= norm;
   }
+  return kernel;
 }
 
-int KapanovaSImageSmoothingMPI::clampValue(int value, int min_val, int max_val) {
-  return std::max(min_val, std::min(value, max_val));
-}
+void KapanovaSImageSmoothingMPI::SmoothPixel(uint8_t *out, int x, int y) {
+  int stride = width * 3;
+  size_t sizek = static_cast<size_t>(2 * radius + 1);
+  float outR = 0.0f;
+  float outG = 0.0f;
+  float outB = 0.0f;
 
-void KapanovaSImageSmoothingMPI::processPixel(int x, int y) {
-  const int kernel_radius = 1;
-  const int kernel_size = 2 * kernel_radius + 1;
+  auto clamp = [](int n, int lo, int hi) { return std::min(std::max(n, lo), hi); };
 
-  float pixel_sum = 0.0f;
+  for (int ry = -radius; ry <= radius; ry++) {
+    for (int rx = -radius; rx <= radius; rx++) {
+      int idX = clamp(x + rx, 0, width - 1);
+      int idY = clamp(y + ry, 0, height - 1);
+      int pos = idY * stride + idX * 3;
+      int kernelPos = static_cast<int>((ry + radius) * sizek + rx + radius);
 
-  for (int ky = -kernel_radius; ky <= kernel_radius; ++ky) {
-    for (int kx = -kernel_radius; kx <= kernel_radius; ++kx) {
-      int pixel_x = clampValue(x + kx, 0, image_width_ - 1);
-      int pixel_y = clampValue(y + ky, 0, image_height_ - 1);
-      int kernel_idx = (ky + kernel_radius) * kernel_size + (kx + kernel_radius);
-
-      pixel_sum += input_matrix_[pixel_y][pixel_x] * gaussian_kernel_[kernel_idx];
+      outR += input[static_cast<size_t>(pos)] * kernel[kernelPos];
+      outG += input[static_cast<size_t>(pos + 1)] * kernel[kernelPos];
+      outB += input[static_cast<size_t>(pos + 2)] * kernel[kernelPos];
     }
   }
 
-  output_matrix_[y][x] = static_cast<int>(pixel_sum);
+  out[0] = static_cast<uint8_t>(outR);
+  out[1] = static_cast<uint8_t>(outG);
+  out[2] = static_cast<uint8_t>(outB);
 }
 
 bool KapanovaSImageSmoothingMPI::RunImpl() {
-  if (input_matrix_.empty()) {
+  int rank = 0, size = 0;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &size);
+
+  // Определяем теги для MPI сообщений
+  constexpr int TAG_EXIT = 0;
+  constexpr int TAG_INFO = 1;
+  constexpr int TAG_DATA = 2;
+  constexpr int TAG_RESULT = 3;
+
+  if (size == 1) {
+    // Последовательная обработка если только 1 процесс
+    for (int y = 0; y < height; y++) {
+      for (int x = 0; x < width; x++) {
+        SmoothPixel(&result[static_cast<size_t>(y * width * 3 + x * 3)], x, y);
+      }
+    }
     return true;
   }
 
-  int process_rank = mpi_communicator_.rank();
-  int total_processes = mpi_communicator_.size();
+  if (rank == 0) {
+    // Процесс 0 - координатор
+    int satellites = size - 1;
+    int escape = 0;
+    int noescape = 1;
 
-  // Распределяем строки между процессами
-  int rows_per_process = image_height_ / total_processes;
-  int remainder_rows = image_height_ % total_processes;
-
-  int start_row = process_rank * rows_per_process + std::min(process_rank, remainder_rows);
-  int end_row = start_row + rows_per_process + (process_rank < remainder_rows ? 1 : 0);
-
-  // Обрабатываем строки, назначенные текущему процессу
-  for (int row = start_row; row < end_row; ++row) {
-    for (int col = 0; col < image_width_; ++col) {
-      processPixel(col, row);
+    // Отправляем ширину изображения всем процессам
+    for (int i = 1; i <= satellites; i++) {
+      MPI_Send(&width, 1, MPI_INT, i, TAG_INFO, MPI_COMM_WORLD);
     }
-  }
 
-  // Собираем результаты на процессе 0
-  if (process_rank == 0) {
-    // Получаем результаты от других процессов
-    for (int proc = 1; proc < total_processes; ++proc) {
-      int proc_start_row = proc * rows_per_process + std::min(proc, remainder_rows);
-      int proc_end_row = proc_start_row + rows_per_process + (proc < remainder_rows ? 1 : 0);
+    // Распределяем строки изображения
+    int row = 0;
+    while (row < height - 2) {
+      // Отправляем данные доступным процессам
+      int processes_to_use = std::min(satellites, height - 2 - row);
 
-      for (int row = proc_start_row; row < proc_end_row; ++row) {
-        std::vector<int> row_data(image_width_);
-        mpi_communicator_.recv(proc, row, row_data);
-        output_matrix_[row] = row_data;
+      for (int i = 0; i < processes_to_use; i++) {
+        MPI_Send(&noescape, 1, MPI_INT, i + 1, TAG_EXIT, MPI_COMM_WORLD);
+
+        // Отправляем 3 строки: текущая и по одной сверху и снизу
+        // Для каждой отправки отправляем 3 строки
+        if (row + i == 0) {
+          // Первая строка - отправляем 2 строки
+          MPI_Send(&input[0], 2 * width * 3, MPI_UNSIGNED_CHAR, i + 1, TAG_DATA, MPI_COMM_WORLD);
+        } else if (row + i == height - 2) {
+          // Предпоследняя строка - отправляем 2 строки
+          int start_pos = (height - 2) * width * 3;
+          MPI_Send(&input[static_cast<size_t>(start_pos)], 2 * width * 3, MPI_UNSIGNED_CHAR, i + 1, TAG_DATA,
+                   MPI_COMM_WORLD);
+        } else {
+          // Обычный случай - отправляем 3 строки
+          int start_pos = (row + i - 1) * width * 3;
+          MPI_Send(&input[static_cast<size_t>(start_pos)], 3 * width * 3, MPI_UNSIGNED_CHAR, i + 1, TAG_DATA,
+                   MPI_COMM_WORLD);
+        }
       }
+
+      // Получаем результаты
+      for (int i = 0; i < processes_to_use; i++) {
+        int result_row = row + i + 1;
+        if (result_row > 0 && result_row < height - 1) {
+          int result_pos = result_row * width * 3;
+          MPI_Recv(&result[static_cast<size_t>(result_pos)], width * 3, MPI_UNSIGNED_CHAR, i + 1, TAG_RESULT,
+                   MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        }
+      }
+
+      row += processes_to_use;
     }
+
+    // Отправляем сигнал завершения
+    for (int i = 1; i <= satellites; i++) {
+      MPI_Send(&escape, 1, MPI_INT, i, TAG_EXIT, MPI_COMM_WORLD);
+    }
+
+    // Обрабатываем первую и последнюю строку
+    for (int x = 0; x < width; x++) {
+      SmoothPixel(&result[static_cast<size_t>(x * 3)], x, 0);
+      SmoothPixel(&result[static_cast<size_t>((height - 1) * width * 3 + x * 3)], x, height - 1);
+    }
+
   } else {
-    // Отправляем результаты на процесс 0
-    for (int row = start_row; row < end_row; ++row) {
-      mpi_communicator_.send(0, row, output_matrix_[row]);
+    // Вспомогательные процессы
+    int local_width = 0;
+    MPI_Recv(&local_width, 1, MPI_INT, 0, TAG_INFO, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+    std::vector<uint8_t> local_input;
+    std::vector<uint8_t> local_result(static_cast<size_t>(local_width * 3));  // Одна строка результата
+
+    int escape = 0;
+
+    while (true) {
+      MPI_Recv(&escape, 1, MPI_INT, 0, TAG_EXIT, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+      if (escape == 0) {
+        break;
+      }
+
+      // Получаем данные - размер зависит от позиции строки
+      MPI_Status status;
+      MPI_Probe(0, TAG_DATA, MPI_COMM_WORLD, &status);
+      int count = 0;
+      MPI_Get_count(&status, MPI_UNSIGNED_CHAR, &count);
+
+      local_input.resize(static_cast<size_t>(count));
+      MPI_Recv(local_input.data(), count, MPI_UNSIGNED_CHAR, 0, TAG_DATA, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+      // Определяем, сколько строк получили
+      int rows_received = count / (local_width * 3);
+
+      // Обрабатываем среднюю строку (если получили 3 строки)
+      if (rows_received == 3) {
+        // Обрабатываем среднюю строку (индекс 1)
+        for (int x = 0; x < local_width; x++) {
+          SmoothPixel(&local_result[static_cast<size_t>(x * 3)], x, 1);
+        }
+
+        // Отправляем результат
+        MPI_Send(local_result.data(), local_width * 3, MPI_UNSIGNED_CHAR, 0, TAG_RESULT, MPI_COMM_WORLD);
+      } else if (rows_received == 2) {
+        // Для краевых случаев обрабатываем первую строку
+        for (int x = 0; x < local_width; x++) {
+          SmoothPixel(&local_result[static_cast<size_t>(x * 3)], x, 0);
+        }
+
+        // Отправляем результат
+        MPI_Send(local_result.data(), local_width * 3, MPI_UNSIGNED_CHAR, 0, TAG_RESULT, MPI_COMM_WORLD);
+      }
     }
   }
 
@@ -133,7 +227,9 @@ bool KapanovaSImageSmoothingMPI::RunImpl() {
 }
 
 bool KapanovaSImageSmoothingMPI::PostProcessingImpl() {
-  GetOutput() = output_matrix_;
+  delete[] kernel;
+  kernel = nullptr;
+  GetOutput() = result;
   return true;
 }
 

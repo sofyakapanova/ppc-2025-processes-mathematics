@@ -2,108 +2,106 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <vector>
 
 namespace kapanova_s_image_smoothing {
 
-KapanovaSImageSmoothingSEQ::KapanovaSImageSmoothingSEQ(const std::vector<std::vector<int>> &in) {
+KapanovaSImageSmoothingSEQ::KapanovaSImageSmoothingSEQ(const InType &in) {
   SetTypeOfTask(GetStaticTypeOfTask());
-  GetInput() = in;
-  GetOutput() = in;
+  GetInput() = in;  // Просто копируем входные данные
 }
 
 bool KapanovaSImageSmoothingSEQ::ValidationImpl() {
-  const auto &matrix = GetInput();
-  if (matrix.empty()) {
-    return true;
-  }
-
-  const size_t cols = matrix[0].size();
-  return std::ranges::all_of(matrix, [cols](const auto &row) { return row.size() == cols; });
+  const auto &inputData = GetInput();
+  return !inputData.empty() && !inputData[0].empty();
 }
 
 bool KapanovaSImageSmoothingSEQ::PreProcessingImpl() {
-  input_image_ = GetInput();
-  if (input_image_.empty()) {
-    return true;
+  const auto &inputData = GetInput();
+  if (inputData.empty() || inputData[0].size() < 4) {
+    return false;
   }
 
-  img_height_ = static_cast<int>(input_image_.size());
-  img_width_ = static_cast<int>(input_image_[0].size());
+  // Первые 4 элемента - ширина и высота (по 2 байта каждое)
+  const auto &data = inputData[0];
+  width = (data[1] << 8) | data[0];
+  height = (data[3] << 8) | data[2];
 
-  // Инициализируем выходное изображение
-  result_image_.resize(img_height_);
-  for (int i = 0; i < img_height_; ++i) {
-    result_image_[i].resize(img_width_);
+  // Остальные данные - пиксели
+  size_t expected_size = static_cast<size_t>(4 + width * height * 3);
+  if (data.size() < expected_size) {
+    return false;
   }
 
-  // Создаем гауссово ядро
-  generateGaussianKernel();
+  input.assign(data.begin() + 4, data.end());
+  result = std::vector<uint8_t>(static_cast<size_t>(width * height * 3));
 
+  CreateKernel();
   return true;
 }
 
-void KapanovaSImageSmoothingSEQ::generateGaussianKernel() {
-  const int filter_radius = 1;
-  const int filter_size = 2 * filter_radius + 1;
-  gaussian_filter_.resize(filter_size * filter_size);
-  float sigma_param = 1.5f;
-  float normalization = 0.0f;
+void KapanovaSImageSmoothingSEQ::CreateKernel() {
+  int size = 2 * radius + 1;
+  kernel = new float[size * size]{0};
+  float sigma = 1.5f;
+  float norm = 0;
 
-  for (int i = -filter_radius; i <= filter_radius; ++i) {
-    for (int j = -filter_radius; j <= filter_radius; ++j) {
-      int idx = (i + filter_radius) * filter_size + (j + filter_radius);
-      gaussian_filter_[idx] = std::exp(-(i * i + j * j) / (2 * sigma_param * sigma_param));
-      normalization += gaussian_filter_[idx];
+  for (int i = -radius; i <= radius; i++) {
+    for (int j = -radius; j <= radius; j++) {
+      kernel[(i + radius) * size + j + radius] = std::exp(-(i * i + j * j) / (2 * sigma * sigma));
+      norm += kernel[(i + radius) * size + j + radius];
     }
   }
 
-  for (float &val : gaussian_filter_) {
-    val /= normalization;
+  for (int i = 0; i < size * size; i++) {
+    kernel[i] /= norm;
   }
 }
 
-int KapanovaSImageSmoothingSEQ::limitToRange(int value, int lower, int upper) {
-  return std::max(lower, std::min(value, upper));
-}
+void KapanovaSImageSmoothingSEQ::SmoothPixel(int x, int y) {
+  int stride = width * 3;
+  size_t sizek = static_cast<size_t>(2 * radius + 1);
+  float outR = 0.0f;
+  float outG = 0.0f;
+  float outB = 0.0f;
 
-void KapanovaSImageSmoothingSEQ::smoothPixel(int x, int y) {
-  const int filter_radius = 1;
-  const int filter_size = 2 * filter_radius + 1;
+  auto clamp = [](int n, int lo, int hi) { return std::min(std::max(n, lo), hi); };
 
-  float pixel_sum = 0.0f;
+  for (int ry = -radius; ry <= radius; ry++) {
+    for (int rx = -radius; rx <= radius; rx++) {
+      int idX = clamp(x + rx, 0, width - 1);
+      int idY = clamp(y + ry, 0, height - 1);
+      int pos = idY * stride + idX * 3;
+      int kernelPos = static_cast<int>((ry + radius) * sizek + rx + radius);
 
-  for (int row_offset = -filter_radius; row_offset <= filter_radius; ++row_offset) {
-    for (int col_offset = -filter_radius; col_offset <= filter_radius; ++col_offset) {
-      int pixel_x = limitToRange(x + col_offset, 0, img_width_ - 1);
-      int pixel_y = limitToRange(y + row_offset, 0, img_height_ - 1);
-      int kernel_index = (row_offset + filter_radius) * filter_size + (col_offset + filter_radius);
-
-      float weight = gaussian_filter_[kernel_index];
-      pixel_sum += input_image_[pixel_y][pixel_x] * weight;
+      outR += input[static_cast<size_t>(pos)] * kernel[kernelPos];
+      outG += input[static_cast<size_t>(pos + 1)] * kernel[kernelPos];
+      outB += input[static_cast<size_t>(pos + 2)] * kernel[kernelPos];
     }
   }
 
-  // Записываем результат
-  result_image_[y][x] = static_cast<int>(pixel_sum);
+  int pos = y * stride + x * 3;
+  result[static_cast<size_t>(pos)] = static_cast<uint8_t>(outR);
+  result[static_cast<size_t>(pos + 1)] = static_cast<uint8_t>(outG);
+  result[static_cast<size_t>(pos + 2)] = static_cast<uint8_t>(outB);
 }
 
 bool KapanovaSImageSmoothingSEQ::RunImpl() {
-  if (input_image_.empty()) {
-    return true;
-  }
-
-  for (int y = 0; y < img_height_; ++y) {
-    for (int x = 0; x < img_width_; ++x) {
-      smoothPixel(x, y);
+  for (int y = 0; y < height; y++) {
+    for (int x = 0; x < width; x++) {
+      SmoothPixel(x, y);
     }
   }
-
   return true;
 }
 
 bool KapanovaSImageSmoothingSEQ::PostProcessingImpl() {
-  GetOutput() = result_image_;
+  delete[] kernel;
+  kernel = nullptr;
+
+  // Сохраняем результат
+  GetOutput() = result;
   return true;
 }
 
