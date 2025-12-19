@@ -16,6 +16,8 @@
 
 std::vector<uint8_t> createTestImageData(int height, int width);
 kapanova_s_image_smoothing::InType formatInputData(const std::vector<uint8_t> &image_data, int width, int height);
+bool runMPITask(kapanova_s_image_smoothing::KapanovaSImageSmoothingMPI &mpi_task);
+bool runSEQTask(kapanova_s_image_smoothing::KapanovaSImageSmoothingSEQ &seq_task);
 
 std::vector<uint8_t> createTestImageData(int height, int width) {
   std::vector<uint8_t> image_data(static_cast<size_t>(height) * static_cast<size_t>(width) * 3);
