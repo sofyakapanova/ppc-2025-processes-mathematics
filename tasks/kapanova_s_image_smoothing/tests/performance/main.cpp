@@ -14,11 +14,9 @@
 #include "kapanova_s_image_smoothing/mpi/include/ops_mpi.hpp"
 #include "kapanova_s_image_smoothing/seq/include/ops_seq.hpp"
 
-// ПРЕДВАРИТЕЛЬНЫЕ ОБЪЯВЛЕНИЯ ФУНКЦИЙ
 std::vector<uint8_t> createTestImageData(int height, int width);
 kapanova_s_image_smoothing::InType formatInputData(const std::vector<uint8_t> &image_data, int width, int height);
 
-// Функция для создания тестового изображения
 std::vector<uint8_t> createTestImageData(int height, int width) {
   std::vector<uint8_t> image_data(static_cast<size_t>(height) * static_cast<size_t>(width) * 3);
   std::random_device rd;
@@ -31,67 +29,57 @@ std::vector<uint8_t> createTestImageData(int height, int width) {
   return image_data;
 }
 
-// Функция для формата данных по шаблону
 kapanova_s_image_smoothing::InType formatInputData(const std::vector<uint8_t> &image_data, int width, int height) {
   kapanova_s_image_smoothing::InType formatted_input;
   std::vector<uint8_t> data;
 
-  // Первые 4 байта - ширина и высота (по 2 байта каждое)
   data.push_back(static_cast<uint8_t>(width & 0xFF));
   data.push_back(static_cast<uint8_t>((width >> 8) & 0xFF));
   data.push_back(static_cast<uint8_t>(height & 0xFF));
   data.push_back(static_cast<uint8_t>((height >> 8) & 0xFF));
 
-  // Добавляем пиксельные данные
   data.insert(data.end(), image_data.begin(), image_data.end());
 
   formatted_input.push_back(data);
   return formatted_input;
 }
 
+bool runMPITask(kapanova_s_image_smoothing::KapanovaSImageSmoothingMPI &mpi_task) {
+  return mpi_task.Validation() && mpi_task.PreProcessing() && mpi_task.Run() && mpi_task.PostProcessing();
+}
+
+bool runSEQTask(kapanova_s_image_smoothing::KapanovaSImageSmoothingSEQ &seq_task) {
+  return seq_task.Validation() && seq_task.PreProcessing() && seq_task.Run() && seq_task.PostProcessing();
+}
+
 TEST(KapanovaSImageSmoothingPerformance, SequentialBaseline) {
-  // Этот тест запускается только для SEQ версии, не зависит от MPI
   const int image_height = 300;
   const int image_width = 300;
 
   auto test_image = createTestImageData(image_height, image_width);
   auto formatted_input = formatInputData(test_image, image_width, image_height);
 
-  kapanova_s_image_smoothing::KapanovaSImageSmoothingSEQ sequentialTask(formatted_input);
+  kapanova_s_image_smoothing::KapanovaSImageSmoothingSEQ sequential_task(formatted_input);
 
-  // Валидация
-  EXPECT_TRUE(sequentialTask.Validation());
-
-  // Предобработка
   auto start_time = std::chrono::high_resolution_clock::now();
-  EXPECT_TRUE(sequentialTask.PreProcessing());
-
-  // Основная обработка
-  EXPECT_TRUE(sequentialTask.Run());
-
-  // Постобработка
-  EXPECT_TRUE(sequentialTask.PostProcessing());
+  EXPECT_TRUE(runSEQTask(sequential_task));
   auto end_time = std::chrono::high_resolution_clock::now();
 
   auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
+  std::cout << "SEQ Baseline (300x300): " << duration.count() << " ms\n";
 
-  std::cout << "SEQ Baseline (300x300): " << duration.count() << " ms" << std::endl;
-
-  // Проверка, что результат не пустой
-  EXPECT_FALSE(sequentialTask.GetOutput().empty());
+  EXPECT_FALSE(sequential_task.GetOutput().empty());
 }
 
 TEST(KapanovaSImageSmoothingPerformance, MPISingleProcess) {
-  // Тест MPI с 1 процессом (должен быть аналогичен SEQ)
-  int rank, size;
+  int rank = 0;
+  int size = 0;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-  // Проверяем условие на всех процессах
   if (size != 1) {
-    // Просто возвращаемся, не используем GTEST_SKIP()
     if (rank == 0) {
-      std::cout << "Note: MPISingleProcess skipped (requires exactly 1 process, got " << size << ")" << std::endl;
+      std::cout << "Note: MPISingleProcess skipped (requires exactly 1 process, got " << size << ")\n";
     }
     return;
   }
@@ -102,35 +90,27 @@ TEST(KapanovaSImageSmoothingPerformance, MPISingleProcess) {
   auto test_image = createTestImageData(image_height, image_width);
   auto formatted_input = formatInputData(test_image, image_width, image_height);
 
-  kapanova_s_image_smoothing::KapanovaSImageSmoothingMPI mpiTask(formatted_input);
+  kapanova_s_image_smoothing::KapanovaSImageSmoothingMPI mpi_task(formatted_input);
 
   auto start_time = std::chrono::high_resolution_clock::now();
-
-  // Правильный порядок вызовов
-  EXPECT_TRUE(mpiTask.Validation());
-  EXPECT_TRUE(mpiTask.PreProcessing());
-  EXPECT_TRUE(mpiTask.Run());
-  EXPECT_TRUE(mpiTask.PostProcessing());
-
+  EXPECT_TRUE(runMPITask(mpi_task));
   auto end_time = std::chrono::high_resolution_clock::now();
+
   auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
+  std::cout << "MPI Single Process (300x300): " << duration.count() << " ms\n";
 
-  std::cout << "MPI Single Process (300x300): " << duration.count() << " ms" << std::endl;
-
-  // Проверка, что результат не пустой
-  EXPECT_FALSE(mpiTask.GetOutput().empty());
+  EXPECT_FALSE(mpi_task.GetOutput().empty());
 }
 
 TEST(KapanovaSImageSmoothingPerformance, MPIMultiProcess) {
-  // Основной тест MPI - работает с 2+ процессами
-  int rank, size;
+  int rank = 0;
+  int size = 0;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-  // Проверяем условие
   if (size == 1) {
     if (rank == 0) {
-      std::cout << "Note: MPIMultiProcess skipped (requires 2+ processes, got " << size << ")" << std::endl;
+      std::cout << "Note: MPIMultiProcess skipped (requires 2+ processes, got " << size << ")\n";
     }
     return;
   }
@@ -141,40 +121,33 @@ TEST(KapanovaSImageSmoothingPerformance, MPIMultiProcess) {
   auto test_image = createTestImageData(image_height, image_width);
   auto formatted_input = formatInputData(test_image, image_width, image_height);
 
-  kapanova_s_image_smoothing::KapanovaSImageSmoothingMPI mpiTask(formatted_input);
+  kapanova_s_image_smoothing::KapanovaSImageSmoothingMPI mpi_task(formatted_input);
 
-  // Синхронизация перед началом теста
   MPI_Barrier(MPI_COMM_WORLD);
-
   auto start_time = std::chrono::high_resolution_clock::now();
 
-  // Правильный порядок вызовов
-  EXPECT_TRUE(mpiTask.Validation());
-  EXPECT_TRUE(mpiTask.PreProcessing());
-  EXPECT_TRUE(mpiTask.Run());
-  EXPECT_TRUE(mpiTask.PostProcessing());
+  EXPECT_TRUE(runMPITask(mpi_task));
 
   MPI_Barrier(MPI_COMM_WORLD);
   auto end_time = std::chrono::high_resolution_clock::now();
 
   if (rank == 0) {
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
-    std::cout << "MPI with " << size << " processes (300x300): " << duration.count() << " ms" << std::endl;
-
-    // Проверка, что результат не пустой
-    EXPECT_FALSE(mpiTask.GetOutput().empty());
+    std::cout << "MPI with " << size << " processes (300x300): " << duration.count() << " ms\n";
+    EXPECT_FALSE(mpi_task.GetOutput().empty());
   }
+
+  EXPECT_FALSE(mpi_task.GetOutput().empty());
 }
 
 TEST(KapanovaSImageSmoothingPerformance, MPIScalability) {
-  // Тест масштабируемости с разными размерами изображений
-  int rank, size;
+  int rank = 0;
+  int size = 0;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-  // Только процесс 0 управляет выводом, но все процессы должны выполнять вычисления
   if (rank == 0) {
-    std::cout << "\n=== MPI Scalability Test (Running with " << size << " processes) ===" << std::endl;
+    std::cout << "\n=== MPI Scalability Test (Running with " << size << " processes) ===\n";
   }
 
   std::vector<std::pair<std::string, std::pair<int, int>>> test_cases = {{"Small (100x100)", {100, 100}},
@@ -187,39 +160,34 @@ TEST(KapanovaSImageSmoothingPerformance, MPIScalability) {
     auto test_image = createTestImageData(height, width);
     auto formatted_input = formatInputData(test_image, width, height);
 
-    kapanova_s_image_smoothing::KapanovaSImageSmoothingMPI mpiTask(formatted_input);
+    kapanova_s_image_smoothing::KapanovaSImageSmoothingMPI mpi_task(formatted_input);
 
     MPI_Barrier(MPI_COMM_WORLD);
     auto start_time = std::chrono::high_resolution_clock::now();
 
-    EXPECT_TRUE(mpiTask.Validation());
-    EXPECT_TRUE(mpiTask.PreProcessing());
-    EXPECT_TRUE(mpiTask.Run());
-    EXPECT_TRUE(mpiTask.PostProcessing());
+    EXPECT_TRUE(runMPITask(mpi_task));
 
     MPI_Barrier(MPI_COMM_WORLD);
     auto end_time = std::chrono::high_resolution_clock::now();
 
     if (rank == 0) {
       auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
-      std::cout << name << ": " << duration.count() << " ms" << std::endl;
+      std::cout << name << ": " << duration.count() << " ms\n";
     }
 
-    // Все процессы проверяют корректность
-    EXPECT_FALSE(mpiTask.GetOutput().empty());
+    EXPECT_FALSE(mpi_task.GetOutput().empty());
   }
 }
 
 TEST(KapanovaSImageSmoothingPerformance, CompareSEQvsMPI) {
-  // Сравнение SEQ и MPI версий (запускается только на 1 процессе)
-  int rank, size;
+  int rank = 0;
+  int size = 0;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-  // Проверяем условие
   if (size != 1) {
     if (rank == 0) {
-      std::cout << "Note: CompareSEQvsMPI skipped (requires exactly 1 process, got " << size << ")" << std::endl;
+      std::cout << "Note: CompareSEQvsMPI skipped (requires exactly 1 process, got " << size << ")\n";
     }
     return;
   }
@@ -230,100 +198,63 @@ TEST(KapanovaSImageSmoothingPerformance, CompareSEQvsMPI) {
   auto test_image = createTestImageData(image_height, image_width);
   auto formatted_input = formatInputData(test_image, image_width, image_height);
 
-  // SEQ версия
-  kapanova_s_image_smoothing::KapanovaSImageSmoothingSEQ seqTask(formatted_input);
-
+  kapanova_s_image_smoothing::KapanovaSImageSmoothingSEQ seq_task(formatted_input);
   auto seq_start = std::chrono::high_resolution_clock::now();
-  EXPECT_TRUE(seqTask.Validation());
-  EXPECT_TRUE(seqTask.PreProcessing());
-  EXPECT_TRUE(seqTask.Run());
-  EXPECT_TRUE(seqTask.PostProcessing());
+  EXPECT_TRUE(runSEQTask(seq_task));
   auto seq_end = std::chrono::high_resolution_clock::now();
   auto seq_duration = std::chrono::duration_cast<std::chrono::milliseconds>(seq_end - seq_start);
 
-  // MPI версия (1 процесс)
-  kapanova_s_image_smoothing::KapanovaSImageSmoothingMPI mpiTask(formatted_input);
-
+  kapanova_s_image_smoothing::KapanovaSImageSmoothingMPI mpi_task(formatted_input);
   auto mpi_start = std::chrono::high_resolution_clock::now();
-  EXPECT_TRUE(mpiTask.Validation());
-  EXPECT_TRUE(mpiTask.PreProcessing());
-  EXPECT_TRUE(mpiTask.Run());
-  EXPECT_TRUE(mpiTask.PostProcessing());
+  EXPECT_TRUE(runMPITask(mpi_task));
   auto mpi_end = std::chrono::high_resolution_clock::now();
   auto mpi_duration = std::chrono::duration_cast<std::chrono::milliseconds>(mpi_end - mpi_start);
 
-  std::cout << "\n=== SEQ vs MPI Comparison (400x400, 1 process) ===" << std::endl;
-  std::cout << "SEQ time: " << seq_duration.count() << " ms" << std::endl;
-  std::cout << "MPI time: " << mpi_duration.count() << " ms" << std::endl;
+  std::cout << "\n=== SEQ vs MPI Comparison (400x400, 1 process) ===\n";
+  std::cout << "SEQ time: " << seq_duration.count() << " ms\n";
+  std::cout << "MPI time: " << mpi_duration.count() << " ms\n";
   std::cout << "Overhead: " << std::fixed << std::setprecision(2)
-            << (static_cast<double>(mpi_duration.count()) / seq_duration.count() - 1.0) * 100.0 << "%" << std::endl;
+            << (static_cast<double>(mpi_duration.count()) / seq_duration.count() - 1.0) * 100.0 << "%\n";
 
-  // Проверяем, что результаты одинаковые
-  EXPECT_EQ(seqTask.GetOutput().size(), mpiTask.GetOutput().size());
-
-  // Для такого размера можно сравнить результаты
-  EXPECT_EQ(seqTask.GetOutput(), mpiTask.GetOutput());
+  EXPECT_EQ(seq_task.GetOutput().size(), mpi_task.GetOutput().size());
+  EXPECT_EQ(seq_task.GetOutput(), mpi_task.GetOutput());
 }
 
 TEST(KapanovaSImageSmoothingPerformance, BoundaryCases) {
-  // Тестирование граничных случаев
-  int rank, size;
+  int rank = 0;
+  int size = 0;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-  // Все процессы выполняют тест, но вывод только от процесса 0
-  if (rank == 0) {
-    std::cout << "\n=== Boundary Cases Test ===" << std::endl;
-  }
+  bool all_tests_passed = true;
 
   // Тест 1: Очень маленькое изображение
-  {
-    auto test_image = createTestImageData(2, 2);
-    auto formatted_input = formatInputData(test_image, 2, 2);
+  auto test_image1 = createTestImageData(2, 2);
+  auto formatted_input1 = formatInputData(test_image1, 2, 2);
+  kapanova_s_image_smoothing::KapanovaSImageSmoothingMPI mpi_task1(formatted_input1);
 
-    kapanova_s_image_smoothing::KapanovaSImageSmoothingMPI mpiTask(formatted_input);
-
-    EXPECT_TRUE(mpiTask.Validation());
-    EXPECT_TRUE(mpiTask.PreProcessing());
-    EXPECT_TRUE(mpiTask.Run());
-    EXPECT_TRUE(mpiTask.PostProcessing());
-
-    if (rank == 0) {
-      std::cout << "2x2 image: OK" << std::endl;
-    }
-  }
+  all_tests_passed = all_tests_passed && runMPITask(mpi_task1);
 
   // Тест 2: Высокое узкое изображение
-  {
-    auto test_image = createTestImageData(100, 10);
-    auto formatted_input = formatInputData(test_image, 10, 100);
+  auto test_image2 = createTestImageData(100, 10);
+  auto formatted_input2 = formatInputData(test_image2, 10, 100);
+  kapanova_s_image_smoothing::KapanovaSImageSmoothingMPI mpi_task2(formatted_input2);
 
-    kapanova_s_image_smoothing::KapanovaSImageSmoothingMPI mpiTask(formatted_input);
-
-    EXPECT_TRUE(mpiTask.Validation());
-    EXPECT_TRUE(mpiTask.PreProcessing());
-    EXPECT_TRUE(mpiTask.Run());
-    EXPECT_TRUE(mpiTask.PostProcessing());
-
-    if (rank == 0) {
-      std::cout << "10x100 image: OK" << std::endl;
-    }
-  }
+  all_tests_passed = all_tests_passed && runMPITask(mpi_task2);
 
   // Тест 3: Широкое низкое изображение
-  {
-    auto test_image = createTestImageData(10, 100);
-    auto formatted_input = formatInputData(test_image, 100, 10);
+  auto test_image3 = createTestImageData(10, 100);
+  auto formatted_input3 = formatInputData(test_image3, 100, 10);
+  kapanova_s_image_smoothing::KapanovaSImageSmoothingMPI mpi_task3(formatted_input3);
 
-    kapanova_s_image_smoothing::KapanovaSImageSmoothingMPI mpiTask(formatted_input);
+  all_tests_passed = all_tests_passed && runMPITask(mpi_task3);
 
-    EXPECT_TRUE(mpiTask.Validation());
-    EXPECT_TRUE(mpiTask.PreProcessing());
-    EXPECT_TRUE(mpiTask.Run());
-    EXPECT_TRUE(mpiTask.PostProcessing());
-
-    if (rank == 0) {
-      std::cout << "100x10 image: OK" << std::endl;
-    }
+  if (rank == 0) {
+    std::cout << "\n=== Boundary Cases Test ===\n";
+    std::cout << "2x2 image: " << (mpi_task1.GetOutput().empty() ? "FAIL" : "OK") << "\n";
+    std::cout << "10x100 image: " << (mpi_task2.GetOutput().empty() ? "FAIL" : "OK") << "\n";
+    std::cout << "100x10 image: " << (mpi_task3.GetOutput().empty() ? "FAIL" : "OK") << "\n";
   }
+
+  EXPECT_TRUE(all_tests_passed);
 }

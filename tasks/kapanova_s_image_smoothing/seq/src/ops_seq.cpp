@@ -9,14 +9,11 @@ namespace kapanova_s_image_smoothing {
 
 KapanovaSImageSmoothingSEQ::KapanovaSImageSmoothingSEQ(const InType &in) {
   SetTypeOfTask(GetStaticTypeOfTask());
-  // Безопасное копирование с проверкой
   if (!in.empty()) {
     GetInput() = in;
   } else {
-    // Инициализируем пустым вектором
     GetInput() = InType();
   }
-  // Инициализируем другие члены
   kernel = nullptr;
   width = 0;
   height = 0;
@@ -33,12 +30,10 @@ bool KapanovaSImageSmoothingSEQ::PreProcessingImpl() {
     return false;
   }
 
-  // Первые 4 элемента - ширина и высота (по 2 байта каждое)
   const auto &data = inputData[0];
   width = (data[1] << 8) | data[0];
   height = (data[3] << 8) | data[2];
 
-  // Остальные данные - пиксели
   size_t expected_size = static_cast<size_t>(4 + width * height * 3);
   if (data.size() < expected_size) {
     return false;
@@ -110,7 +105,6 @@ bool KapanovaSImageSmoothingSEQ::PostProcessingImpl() {
   delete[] kernel;
   kernel = nullptr;
 
-  // Сохраняем результат
   GetOutput() = result;
   return true;
 }

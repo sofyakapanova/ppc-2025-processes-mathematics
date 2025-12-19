@@ -39,7 +39,6 @@ class KapanovaSImageSmoothingFuncTests : public ppc::util::BaseRunFuncTests<InTy
   bool CheckTestOutputData(OutType &output_data) final {
     // Проверяем, что результат не пустой и имеет правильный размер
     if (expected_output_.empty()) {
-      // ИСПРАВЛЕННАЯ СТРОКА: используем size_t для обоих операндов
       size_t expected_size = static_cast<size_t>(width_) * static_cast<size_t>(height_) * 3;
       return !output_data.empty() && output_data.size() == expected_size;
     }
@@ -47,7 +46,6 @@ class KapanovaSImageSmoothingFuncTests : public ppc::util::BaseRunFuncTests<InTy
   }
 
   InType GetTestInputData() final {
-    // Форматируем данные: создаем вектор векторов
     InType formatted_input;
     std::vector<uint8_t> data;
 
@@ -57,7 +55,6 @@ class KapanovaSImageSmoothingFuncTests : public ppc::util::BaseRunFuncTests<InTy
     data.push_back(static_cast<uint8_t>(height_ & 0xFF));
     data.push_back(static_cast<uint8_t>((height_ >> 8) & 0xFF));
 
-    // Добавляем пиксельные данные
     data.insert(data.end(), image_data_.begin(), image_data_.end());
 
     formatted_input.push_back(data);
@@ -74,7 +71,6 @@ class KapanovaSImageSmoothingFuncTests : public ppc::util::BaseRunFuncTests<InTy
 
 namespace {
 
-// Тестовые данные
 const std::vector<uint8_t> kImage3x3 = {255, 0,   0, 0,   255, 0,   0,   0,  255, 255, 255, 0,   0,  255,
                                         255, 255, 0, 255, 128, 128, 128, 64, 64,  64,  192, 192, 192};
 const int kWidth3x3 = 3;
@@ -84,7 +80,7 @@ const std::vector<uint8_t> kImage2x2 = {255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 25
 const int kWidth2x2 = 2;
 const int kHeight2x2 = 2;
 
-const std::vector<uint8_t> kImage4x4(4 * 4 * 3, 128);  // 4x4 изображение, все пиксели серые
+const std::vector<uint8_t> kImage4x4(4 * 4 * 3, 128);
 const int kWidth4x4 = 4;
 const int kHeight4x4 = 4;
 

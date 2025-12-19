@@ -11,14 +11,11 @@ namespace kapanova_s_image_smoothing {
 
 KapanovaSImageSmoothingMPI::KapanovaSImageSmoothingMPI(const InType &in) {
   SetTypeOfTask(GetStaticTypeOfTask());
-  // Безопасное копирование с проверкой
   if (!in.empty()) {
     GetInput() = in;
   } else {
-    // Инициализируем пустым вектором
     GetInput() = InType();
   }
-  // Инициализируем другие члены
   width = 0;
   height = 0;
 }
@@ -34,12 +31,10 @@ bool KapanovaSImageSmoothingMPI::PreProcessingImpl() {
     return false;
   }
 
-  // Первые 4 элемента - ширина и высота (по 2 байта каждое)
   const auto &data = inputData[0];
   width = (data[1] << 8) | data[0];
   height = (data[3] << 8) | data[2];
 
-  // Проверяем размер данных
   size_t required_pixels = static_cast<size_t>(width) * static_cast<size_t>(height) * 3;
   size_t total_required_size = 4 + required_pixels;
 
@@ -49,7 +44,7 @@ bool KapanovaSImageSmoothingMPI::PreProcessingImpl() {
 
   input.assign(data.begin() + 4, data.end());
   result = std::vector<uint8_t>(required_pixels);
-  kernel = CreateKernel();  // Теперь kernel - это std::vector<float>
+  kernel = CreateKernel();
 
   return true;
 }
@@ -107,14 +102,12 @@ bool KapanovaSImageSmoothingMPI::RunImpl() {
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-  // Определяем теги для MPI сообщений
   constexpr int TAG_EXIT = 0;
   constexpr int TAG_INFO = 1;
   constexpr int TAG_DATA = 2;
   constexpr int TAG_RESULT = 3;
 
   if (size == 1) {
-    // Последовательная обработка если только 1 процесс
     for (int y = 0; y < height; y++) {
       for (int x = 0; x < width; x++) {
         SmoothPixel(&result[static_cast<size_t>(y * width * 3 + x * 3)], x, y);
@@ -134,27 +127,20 @@ bool KapanovaSImageSmoothingMPI::RunImpl() {
       MPI_Send(&width, 1, MPI_INT, i, TAG_INFO, MPI_COMM_WORLD);
     }
 
-    // Распределяем строки изображения
     int row = 0;
     while (row < height - 2) {
-      // Отправляем данные доступным процессам
       int processes_to_use = std::min(satellites, height - 2 - row);
 
       for (int i = 0; i < processes_to_use; i++) {
         MPI_Send(&noescape, 1, MPI_INT, i + 1, TAG_EXIT, MPI_COMM_WORLD);
 
-        // Отправляем 3 строки: текущая и по одной сверху и снизу
-        // Для каждой отправки отправляем 3 строки
         if (row + i == 0) {
-          // Первая строка - отправляем 2 строки
           MPI_Send(&input[0], 2 * width * 3, MPI_UNSIGNED_CHAR, i + 1, TAG_DATA, MPI_COMM_WORLD);
         } else if (row + i == height - 2) {
-          // Предпоследняя строка - отправляем 2 строки
           int start_pos = (height - 2) * width * 3;
           MPI_Send(&input[static_cast<size_t>(start_pos)], 2 * width * 3, MPI_UNSIGNED_CHAR, i + 1, TAG_DATA,
                    MPI_COMM_WORLD);
         } else {
-          // Обычный случай - отправляем 3 строки
           int start_pos = (row + i - 1) * width * 3;
           MPI_Send(&input[static_cast<size_t>(start_pos)], 3 * width * 3, MPI_UNSIGNED_CHAR, i + 1, TAG_DATA,
                    MPI_COMM_WORLD);
@@ -174,7 +160,6 @@ bool KapanovaSImageSmoothingMPI::RunImpl() {
       row += processes_to_use;
     }
 
-    // Отправляем сигнал завершения
     for (int i = 1; i <= satellites; i++) {
       MPI_Send(&escape, 1, MPI_INT, i, TAG_EXIT, MPI_COMM_WORLD);
     }
@@ -186,12 +171,11 @@ bool KapanovaSImageSmoothingMPI::RunImpl() {
     }
 
   } else {
-    // Вспомогательные процессы
     int local_width = 0;
     MPI_Recv(&local_width, 1, MPI_INT, 0, TAG_INFO, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
     std::vector<uint8_t> local_input;
-    std::vector<uint8_t> local_result(static_cast<size_t>(local_width * 3));  // Одна строка результата
+    std::vector<uint8_t> local_result(static_cast<size_t>(local_width * 3));
 
     int escape = 0;
 
@@ -201,7 +185,6 @@ bool KapanovaSImageSmoothingMPI::RunImpl() {
         break;
       }
 
-      // Получаем данные - размер зависит от позиции строки
       MPI_Status status;
       MPI_Probe(0, TAG_DATA, MPI_COMM_WORLD, &status);
       int count = 0;
@@ -213,22 +196,17 @@ bool KapanovaSImageSmoothingMPI::RunImpl() {
       // Определяем, сколько строк получили
       int rows_received = count / (local_width * 3);
 
-      // Обрабатываем среднюю строку (если получили 3 строки)
       if (rows_received == 3) {
-        // Обрабатываем среднюю строку (индекс 1)
         for (int x = 0; x < local_width; x++) {
           SmoothPixel(&local_result[static_cast<size_t>(x * 3)], x, 1);
         }
 
-        // Отправляем результат
         MPI_Send(local_result.data(), local_width * 3, MPI_UNSIGNED_CHAR, 0, TAG_RESULT, MPI_COMM_WORLD);
       } else if (rows_received == 2) {
-        // Для краевых случаев обрабатываем первую строку
         for (int x = 0; x < local_width; x++) {
           SmoothPixel(&local_result[static_cast<size_t>(x * 3)], x, 0);
         }
 
-        // Отправляем результат
         MPI_Send(local_result.data(), local_width * 3, MPI_UNSIGNED_CHAR, 0, TAG_RESULT, MPI_COMM_WORLD);
       }
     }
@@ -238,8 +216,6 @@ bool KapanovaSImageSmoothingMPI::RunImpl() {
 }
 
 bool KapanovaSImageSmoothingMPI::PostProcessingImpl() {
-  // Теперь не нужно удалять kernel, так как это std::vector
-  // vector автоматически очистится при разрушении объекта
   GetOutput() = result;
   return true;
 }
