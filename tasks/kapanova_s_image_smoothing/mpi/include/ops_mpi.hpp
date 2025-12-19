@@ -19,14 +19,14 @@ class KapanovaSImageSmoothingMPI : public BaseTask {
   bool PostProcessingImpl() override;
 
   void SmoothPixel(uint8_t *out, int x, int y);
-  float *CreateKernel();
+  std::vector<float> CreateKernel();  // Измените возвращаемый тип!
 
   int width = 0;
   int height = 0;
   std::vector<uint8_t> input;
   std::vector<uint8_t> result;
   int radius = 1;
-  float *kernel = nullptr;
+  std::vector<float> kernel;  // Исправлено: добавлено имя переменной
 };
 
 }  // namespace kapanova_s_image_smoothing

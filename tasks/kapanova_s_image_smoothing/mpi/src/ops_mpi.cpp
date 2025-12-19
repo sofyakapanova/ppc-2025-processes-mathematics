@@ -40,28 +40,30 @@ bool KapanovaSImageSmoothingMPI::PreProcessingImpl() {
 
   input.assign(data.begin() + 4, data.end());
   result = std::vector<uint8_t>(required_pixels);
-  kernel = CreateKernel();
+  kernel = CreateKernel();  // Теперь kernel - это std::vector<float>
 
   return true;
 }
 
-float *KapanovaSImageSmoothingMPI::CreateKernel() {
+std::vector<float> KapanovaSImageSmoothingMPI::CreateKernel() {
   int size = 2 * radius + 1;
-  auto *kernel = new float[size * size]{0};
+  std::vector<float> kernel_local(size * size, 0.0f);
   float sigma = 1.5f;
   float norm = 0;
 
   for (int i = -radius; i <= radius; i++) {
     for (int j = -radius; j <= radius; j++) {
-      kernel[(i + radius) * size + j + radius] = std::exp(-(i * i + j * j) / (2 * sigma * sigma));
-      norm += kernel[(i + radius) * size + j + radius];
+      kernel_local[static_cast<size_t>((i + radius) * size + j + radius)] =
+          std::exp(-(i * i + j * j) / (2 * sigma * sigma));
+      norm += kernel_local[static_cast<size_t>((i + radius) * size + j + radius)];
     }
   }
 
   for (int i = 0; i < size * size; i++) {
-    kernel[i] /= norm;
+    kernel_local[static_cast<size_t>(i)] /= norm;
   }
-  return kernel;
+
+  return kernel_local;
 }
 
 void KapanovaSImageSmoothingMPI::SmoothPixel(uint8_t *out, int x, int y) {
@@ -80,9 +82,9 @@ void KapanovaSImageSmoothingMPI::SmoothPixel(uint8_t *out, int x, int y) {
       int pos = idY * stride + idX * 3;
       int kernelPos = static_cast<int>((ry + radius) * sizek + rx + radius);
 
-      outR += input[static_cast<size_t>(pos)] * kernel[kernelPos];
-      outG += input[static_cast<size_t>(pos + 1)] * kernel[kernelPos];
-      outB += input[static_cast<size_t>(pos + 2)] * kernel[kernelPos];
+      outR += static_cast<float>(input[static_cast<size_t>(pos)]) * kernel[static_cast<size_t>(kernelPos)];
+      outG += static_cast<float>(input[static_cast<size_t>(pos + 1)]) * kernel[static_cast<size_t>(kernelPos)];
+      outB += static_cast<float>(input[static_cast<size_t>(pos + 2)]) * kernel[static_cast<size_t>(kernelPos)];
     }
   }
 
@@ -227,8 +229,8 @@ bool KapanovaSImageSmoothingMPI::RunImpl() {
 }
 
 bool KapanovaSImageSmoothingMPI::PostProcessingImpl() {
-  delete[] kernel;
-  kernel = nullptr;
+  // Теперь не нужно удалять kernel, так как это std::vector
+  // vector автоматически очистится при разрушении объекта
   GetOutput() = result;
   return true;
 }
