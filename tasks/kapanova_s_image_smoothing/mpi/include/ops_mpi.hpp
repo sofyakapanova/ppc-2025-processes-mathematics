@@ -22,7 +22,7 @@ class KapanovaSImageSmoothingMPI : public BaseTask {
   bool PostProcessingImpl() override;
 
   void SmoothPixel(uint8_t *out, int x, int y);
-  std::vector<float> CreateKernel()() const;
+  std::vector<float> CreateKernel() const;
 
   int width_ = 0;
   int height_ = 0;

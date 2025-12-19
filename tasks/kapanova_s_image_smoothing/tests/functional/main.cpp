@@ -45,7 +45,7 @@ class KapanovaSImageSmoothingFuncTests : public ppc::util::BaseRunFuncTests<InTy
     return output_data == expected_output_;
   }
 
-  InType GetTestinput_Data() final {
+  InType GetTestInputData() final {
     InType formatted_input_;
     std::vector<uint8_t> data;
 

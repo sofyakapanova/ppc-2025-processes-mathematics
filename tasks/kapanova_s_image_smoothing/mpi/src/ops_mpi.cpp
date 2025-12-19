@@ -12,21 +12,21 @@ namespace kapanova_s_image_smoothing {
 KapanovaSImageSmoothingMPI::KapanovaSImageSmoothingMPI(const InType &in) {
   SetTypeOfTask(GetStaticTypeOfTask());
   if (!in.empty()) {
-    Getinput_() = in;
+    GetInput() = in;
   } else {
-    Getinput_() = InType();
+    GetInput() = InType();
   }
   width_ = 0;
   height_ = 0;
 }
 
 bool KapanovaSImageSmoothingMPI::ValidationImpl() {
-  const auto &input_Data = Getinput_();
+  const auto &input_Data = GetInput();
   return !input_Data.empty() && !input_Data[0].empty();
 }
 
 bool KapanovaSImageSmoothingMPI::PreProcessingImpl() {
-  const auto &input_Data = Getinput_();
+  const auto &input_Data = GetInput();
   if (input_Data.empty() || input_Data[0].size() < 4) {
     return false;
   }
@@ -44,12 +44,12 @@ bool KapanovaSImageSmoothingMPI::PreProcessingImpl() {
 
   input_.assign(data.begin() + 4, data.end());
   result_ = std::vector<uint8_t>(required_pixels);
-  kernel_ = CreateKernel()();
+  kernel_ = CreateKernel();
 
   return true;
 }
 
-std::vector<float> KapanovaSImageSmoothingMPI::CreateKernel()() const {
+std::vector<float> KapanovaSImageSmoothingMPI::CreateKernel() const {
   int size = 2 * radius_ + 1;
   std::vector<float> kernel__local(size * size, 0.0F);
   float sigma = 1.5F;

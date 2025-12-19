@@ -21,7 +21,7 @@ class KapanovaSImageSmoothingSEQ : public BaseTask {
   bool RunImpl() override;
   bool PostProcessingImpl() override;
 
-  void CreateKernel()();
+  void CreateKernel();
   void SmoothPixel(int x, int y);
 
   int width_ = 0;
