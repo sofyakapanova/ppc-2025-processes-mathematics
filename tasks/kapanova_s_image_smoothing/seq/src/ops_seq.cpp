@@ -37,7 +37,7 @@ bool KapanovaSImageSmoothingSEQ::PreProcessingImpl() {
   width_ = static_cast<int>((data[1] << 8) | data[0]);
   height_ = static_cast<int>((data[3] << 8) | data[2]);
 
-  const size_t expected_size = 4 + static_cast<size_t>(width_ * height_ * 3);
+  const auto expected_size = 4U + static_cast<size_t>(width_ * height_ * 3);
   if (data.size() < expected_size) {
     return false;
   }
@@ -70,7 +70,7 @@ void KapanovaSImageSmoothingSEQ::CreateKernel() {
 
 void KapanovaSImageSmoothingSEQ::SmoothPixel(int x_coord, int y_coord) {
   const int stride = width_ * 3;
-  const auto size_k = static_cast<size_t>((2 * radius_) + 1);
+  constexpr int kSize = (2 * 1) + 1;  // radius_ = 1
   float out_r = 0.0F;
   float out_g = 0.0F;
   float out_b = 0.0F;
@@ -81,19 +81,19 @@ void KapanovaSImageSmoothingSEQ::SmoothPixel(int x_coord, int y_coord) {
     for (int rx = -radius_; rx <= radius_; ++rx) {
       const int idx = clamp(x_coord + rx, 0, width_ - 1);
       const int idy = clamp(y_coord + ry, 0, height_ - 1);
-      const int pos = (idy * stride) + (idx * 3);
-      const size_t kernel_pos = static_cast<size_t>((ry + radius_) * static_cast<int>(size_k) + rx + radius_);
+      const auto pos = static_cast<size_t>((idy * stride) + (idx * 3));
+      const auto kernel_pos = static_cast<size_t>(((ry + radius_) * kSize) + rx + radius_);
 
-      out_r += static_cast<float>(input_[static_cast<size_t>(pos)]) * kernel_[kernel_pos];
-      out_g += static_cast<float>(input_[static_cast<size_t>(pos + 1)]) * kernel_[kernel_pos];
-      out_b += static_cast<float>(input_[static_cast<size_t>(pos + 2)]) * kernel_[kernel_pos];
+      out_r += static_cast<float>(input_[pos]) * kernel_[kernel_pos];
+      out_g += static_cast<float>(input_[pos + 1U]) * kernel_[kernel_pos];
+      out_b += static_cast<float>(input_[pos + 2U]) * kernel_[kernel_pos];
     }
   }
 
-  const int pos = (y_coord * stride) + (x_coord * 3);
-  result_[static_cast<size_t>(pos)] = static_cast<uint8_t>(out_r);
-  result_[static_cast<size_t>(pos + 1)] = static_cast<uint8_t>(out_g);
-  result_[static_cast<size_t>(pos + 2)] = static_cast<uint8_t>(out_b);
+  const auto pos = static_cast<size_t>((y_coord * stride) + (x_coord * 3));
+  result_[pos] = static_cast<uint8_t>(out_r);
+  result_[pos + 1U] = static_cast<uint8_t>(out_g);
+  result_[pos + 2U] = static_cast<uint8_t>(out_b);
 }
 
 bool KapanovaSImageSmoothingSEQ::RunImpl() {
