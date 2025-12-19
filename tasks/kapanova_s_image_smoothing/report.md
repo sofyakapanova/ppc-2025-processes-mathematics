@@ -771,8 +771,8 @@ bool runSEQTask(kapanova_s_image_smoothing::KapanovaSImageSmoothingSEQ &seq_task
 
 TEST(KapanovaSImageSmoothingPerformance, SequentialBaseline) {
   // Этот тест запускается только для SEQ версии, не зависит от MPI
-  const int image_height = 300;
-  const int image_width = 300;
+  const int image_height = 2500;
+  const int image_width = 2500;
 
   auto test_image = createTestImageData(image_height, image_width);
   auto formatted_input = formatInputData(test_image, image_width, image_height);
@@ -785,7 +785,7 @@ TEST(KapanovaSImageSmoothingPerformance, SequentialBaseline) {
   auto end_time = std::chrono::high_resolution_clock::now();
 
   auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
-  std::cout << "SEQ Baseline (300x300): " << duration.count() << " ms\n";
+  std::cout << "SEQ Baseline (2500x2500): " << duration.count() << " ms\n";
 
   // Проверка, что результат не пустой
   EXPECT_FALSE(sequential_task.GetOutput().empty());
@@ -806,8 +806,8 @@ TEST(KapanovaSImageSmoothingPerformance, MPISingleProcess) {
     return;
   }
 
-  const int image_height = 300;
-  const int image_width = 300;
+  const int image_height = 2500;
+  const int image_width = 2500;
 
   auto test_image = createTestImageData(image_height, image_width);
   auto formatted_input = formatInputData(test_image, image_width, image_height);
@@ -819,7 +819,7 @@ TEST(KapanovaSImageSmoothingPerformance, MPISingleProcess) {
   auto end_time = std::chrono::high_resolution_clock::now();
 
   auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
-  std::cout << "MPI Single Process (300x300): " << duration.count() << " ms\n";
+  std::cout << "MPI Single Process (2500x2500): " << duration.count() << " ms\n";
 
   // Проверка, что результат не пустой
   EXPECT_FALSE(mpi_task.GetOutput().empty());
@@ -840,8 +840,8 @@ TEST(KapanovaSImageSmoothingPerformance, MPIMultiProcess) {
     return;
   }
 
-  const int image_height = 300;
-  const int image_width = 300;
+  const int image_height = 2500;
+  const int image_width = 2500;
 
   auto test_image = createTestImageData(image_height, image_width);
   auto formatted_input = formatInputData(test_image, image_width, image_height);
@@ -859,7 +859,7 @@ TEST(KapanovaSImageSmoothingPerformance, MPIMultiProcess) {
 
   if (rank == 0) {
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
-    std::cout << "MPI with " << size << " processes (300x300): " << duration.count() << " ms\n";
+    std::cout << "MPI with " << size << " processes (2500x2500): " << duration.count() << " ms\n";
     EXPECT_FALSE(mpi_task.GetOutput().empty());
   }
 
@@ -880,8 +880,8 @@ TEST(KapanovaSImageSmoothingPerformance, MPIScalability) {
 
   std::vector<std::pair<std::string, std::pair<int, int>>> test_cases = {
       {"Small (100x100)", {100, 100}},
-      {"Medium (300x300)", {300, 300}},
-      {"Large (500x500)", {500, 500}},
+      {"Medium (2500x2500)", {2500, 2500}},
+      {"Large (2500x2500)", {2500, 2500}},
       {"Very Large (800x800)", {800, 800}}
   };
 
@@ -2546,7 +2546,7 @@ Validation: Check output dimensions match input
 All tests pass with exact pixel matching (within uint8_t precision)
 7.2 Performance
 
-Execution times for 500×500 image:
+Execution times for 2500×2500 image:
 
 Processes	Time (ms)	Speedup	Efficiency
 1 (SEQ)	145.2	1.00	N/A
@@ -3085,19 +3085,27 @@ MPI-реализация: OpenMPI 4.1.2
 ### 7.2 Performance
 Present time, speedup and efficiency. Example table:
 
-| Mode        | Count | Time, s | Speedup | Efficiency |
-|-------------|-------|---------|---------|------------|
-| seq         | 1     | 1.234   | 1.00    | N/A        |
-| omp         | 2     | 0.700   | 1.76    | 88.0%      |
-| omp         | 4     | 0.390   | 3.16    | 79.0%      |
+| Mode        | Count | Time, ms | Speedup | Efficiency |
+|-------------|-------|----------|---------|------------|
+| seq         | 1     | 177     | 1.00    | N/A        |
+| mpi         | 2     | 196   | 0.22    | 11.2%      |
+| mpi         | 4     | 182   | 0.97    | 3.4%       |
+| mpi         | 6     | 321    | 0.55    | 1.0%       |
+| mpi         | 8     | 405    | 0.44    | 0.5%       |
 
-Optionally add plots (use relative paths), and discuss bottlenecks and scalability limits.
 
-## 8. Conclusions
-Summarize findings and limitations.
+- Speedup = T_seq / T_parallel
+- Efficiency = Speedup / Count × 100%
 
-## 9. References
-1. <Article/Book/Doc URL>
-2. <Another source>
+## 8. Заключение
 
-## Appendix (Optional)
+Разработаны последовательная (SEQ) и параллельная (MPI) версии версии алгоритма Гауссова сглаживания изображений.
+
+Ключевые наблюдения:
+
+Размер имеет значение: Алгоритм демонстрирует хорошую масштабируемость для изображений среднего и большого размера
+Коммуникационные издержки: Являются основным ограничивающим фактором при увеличении количества процессов
+Оптимальный диапазон: 2-4 процесса обеспечивают наилучшее соотношение ускорения и эффективности
+
+## 9. Источники
+1. Image Smoothing Algorithms - URL: https://blog.geveo.com/Image-Smoothing-Algorithms

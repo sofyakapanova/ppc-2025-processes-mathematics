@@ -29,7 +29,7 @@ class KapanovaSImageSmoothingSEQ : public BaseTask {
   std::vector<uint8_t> input_;
   std::vector<uint8_t> result_;
   int radius_ = 1;
-  float *kernel_ = nullptr;
+  std::vector<float> kernel_;
 };
 
 }  // namespace kapanova_s_image_smoothing
