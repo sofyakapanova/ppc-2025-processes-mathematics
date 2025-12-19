@@ -14,6 +14,10 @@
 #include "kapanova_s_image_smoothing/mpi/include/ops_mpi.hpp"
 #include "kapanova_s_image_smoothing/seq/include/ops_seq.hpp"
 
+// ПРЕДВАРИТЕЛЬНЫЕ ОБЪЯВЛЕНИЯ ФУНКЦИЙ
+std::vector<uint8_t> createTestImageData(int height, int width);
+kapanova_s_image_smoothing::InType formatInputData(const std::vector<uint8_t> &image_data, int width, int height);
+
 // Функция для создания тестового изображения
 std::vector<uint8_t> createTestImageData(int height, int width) {
   std::vector<uint8_t> image_data(static_cast<size_t>(height) * static_cast<size_t>(width) * 3);
