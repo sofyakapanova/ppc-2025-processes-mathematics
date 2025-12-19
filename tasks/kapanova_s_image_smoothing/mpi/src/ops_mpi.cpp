@@ -64,7 +64,7 @@ std::vector<float> KapanovaSImageSmoothingMPI::CreateKernel() const {
 
   for (int i = -radius_; i <= radius_; ++i) {
     for (int j = -radius_; j <= radius_; ++j) {
-      const auto index = static_cast<size_t>((i + radius_) * size + j + radius_);
+      const auto index = static_cast<size_t>(((i + radius_) * size) + (j + radius_));
       kernel_local[index] = std::exp(-(static_cast<float>((i * i) + (j * j))) / ((2.0F * kSigma) * kSigma));
       norm += kernel_local[index];
     }
@@ -90,8 +90,8 @@ void KapanovaSImageSmoothingMPI::SmoothPixel(uint8_t *out, int x_coord, int y_co
     for (int rx = -radius_; rx <= radius_; ++rx) {
       const int idx = clamp(x_coord + rx, 0, width_ - 1);
       const int idy = clamp(y_coord + ry, 0, height_ - 1);
-      const auto pos = static_cast<size_t>(idy * stride + idx * 3);
-      const auto kernel_pos = static_cast<size_t>((ry + radius_) * kSize + rx + radius_);
+      const auto pos = static_cast<size_t>((idy * stride) + (idx * 3));
+      const auto kernel_pos = static_cast<size_t>(((ry + radius_) * kSize) + (rx + radius_));
 
       out_r += static_cast<float>(input_[pos]) * kernel_[kernel_pos];
       out_g += static_cast<float>(input_[pos + 1U]) * kernel_[kernel_pos];
@@ -119,7 +119,7 @@ bool KapanovaSImageSmoothingMPI::RunImpl() {
   if (size == 1) {
     for (int y_coord = 0; y_coord < height_; ++y_coord) {
       for (int x_coord = 0; x_coord < width_; ++x_coord) {
-        const auto pos = static_cast<size_t>(y_coord * width_ * 3 + x_coord * 3);
+        const auto pos = static_cast<size_t>((y_coord * width_ * 3) + (x_coord * 3));
         SmoothPixel(&result_[pos], x_coord, y_coord);
       }
     }
@@ -173,7 +173,7 @@ bool KapanovaSImageSmoothingMPI::RunImpl() {
 
     for (int x_coord = 0; x_coord < width_; ++x_coord) {
       SmoothPixel(&result_[static_cast<size_t>(x_coord * 3)], x_coord, 0);
-      const auto pos = static_cast<size_t>((height_ - 1) * width_ * 3 + x_coord * 3);
+      const auto pos = static_cast<size_t>(((height_ - 1) * width_ * 3) + (x_coord * 3));
       SmoothPixel(&result_[pos], x_coord, height_ - 1);
     }
 
