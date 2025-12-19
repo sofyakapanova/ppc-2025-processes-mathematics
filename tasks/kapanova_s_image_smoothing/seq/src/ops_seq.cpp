@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
 #include <cstdio>
 #include <vector>
 
@@ -14,98 +16,99 @@ KapanovaSImageSmoothingSEQ::KapanovaSImageSmoothingSEQ(const InType &in) {
   } else {
     GetInput() = InType();
   }
-  kernel = nullptr;
-  width = 0;
-  height = 0;
+  kernel_ = nullptr;
+  width_ = 0;
+  height_ = 0;
 }
 
 bool KapanovaSImageSmoothingSEQ::ValidationImpl() {
-  const auto &inputData = GetInput();
-  return !inputData.empty() && !inputData[0].empty();
+  const auto &input_data = GetInput();
+  return !input_data.empty() && !input_data[0].empty();
 }
 
 bool KapanovaSImageSmoothingSEQ::PreProcessingImpl() {
-  const auto &inputData = GetInput();
-  if (inputData.empty() || inputData[0].size() < 4) {
+  const auto &input_data = GetInput();
+  if (input_data.empty() || input_data[0].size() < 4) {
     return false;
   }
 
-  const auto &data = inputData[0];
-  width = (data[1] << 8) | data[0];
-  height = (data[3] << 8) | data[2];
+  const auto &data = input_data[0];
+  width_ = static_cast<int>((data[1] << 8) | data[0]);
+  height_ = static_cast<int>((data[3] << 8) | data[2]);
 
-  size_t expected_size = static_cast<size_t>(4 + width * height * 3);
+  const auto expected_size = static_cast<size_t>(4 + (width_ * height_ * 3));
   if (data.size() < expected_size) {
     return false;
   }
 
-  input.assign(data.begin() + 4, data.end());
-  result = std::vector<uint8_t>(static_cast<size_t>(width * height * 3));
+  input_.assign(data.begin() + 4, data.end());
+  result_ = std::vector<uint8_t>(static_cast<size_t>(width_ * height_ * 3));
 
   CreateKernel();
   return true;
 }
 
 void KapanovaSImageSmoothingSEQ::CreateKernel() {
-  int size = 2 * radius + 1;
-  kernel = new float[size * size]{0};
-  float sigma = 1.5f;
-  float norm = 0;
+  const int size = (2 * radius_) + 1;
+  kernel_ = new float[static_cast<size_t>(size * size)]{0};
+  constexpr float kSigma = 1.5F;
+  float norm = 0.0F;
 
-  for (int i = -radius; i <= radius; i++) {
-    for (int j = -radius; j <= radius; j++) {
-      kernel[(i + radius) * size + j + radius] = std::exp(-(i * i + j * j) / (2 * sigma * sigma));
-      norm += kernel[(i + radius) * size + j + radius];
+  for (int i = -radius_; i <= radius_; ++i) {
+    for (int j = -radius_; j <= radius_; ++j) {
+      const int kernel_index = ((i + radius_) * size) + j + radius_;
+      kernel_[kernel_index] = std::exp(-(static_cast<float>((i * i) + (j * j))) / ((2.0F * kSigma) * kSigma));
+      norm += kernel_[kernel_index];
     }
   }
 
-  for (int i = 0; i < size * size; i++) {
-    kernel[i] /= norm;
+  for (int i = 0; i < (size * size); ++i) {
+    kernel_[i] /= norm;
   }
 }
 
 void KapanovaSImageSmoothingSEQ::SmoothPixel(int x, int y) {
-  int stride = width * 3;
-  size_t sizek = static_cast<size_t>(2 * radius + 1);
-  float outR = 0.0f;
-  float outG = 0.0f;
-  float outB = 0.0f;
+  const int stride = width_ * 3;
+  const auto sizek = static_cast<size_t>((2 * radius_) + 1);
+  float out_r = 0.0F;
+  float out_g = 0.0F;
+  float out_b = 0.0F;
 
   auto clamp = [](int n, int lo, int hi) { return std::min(std::max(n, lo), hi); };
 
-  for (int ry = -radius; ry <= radius; ry++) {
-    for (int rx = -radius; rx <= radius; rx++) {
-      int idX = clamp(x + rx, 0, width - 1);
-      int idY = clamp(y + ry, 0, height - 1);
-      int pos = idY * stride + idX * 3;
-      int kernelPos = static_cast<int>((ry + radius) * sizek + rx + radius);
+  for (int ry = -radius_; ry <= radius_; ++ry) {
+    for (int rx = -radius_; rx <= radius_; ++rx) {
+      const int idx = clamp(x + rx, 0, width_ - 1);
+      const int idy = clamp(y + ry, 0, height_ - 1);
+      const int pos = (idy * stride) + (idx * 3);
+      const int kernel_pos = static_cast<int>(((ry + radius_) * static_cast<int>(sizek)) + rx + radius_);
 
-      outR += input[static_cast<size_t>(pos)] * kernel[kernelPos];
-      outG += input[static_cast<size_t>(pos + 1)] * kernel[kernelPos];
-      outB += input[static_cast<size_t>(pos + 2)] * kernel[kernelPos];
+      out_r += static_cast<float>(input_[static_cast<size_t>(pos)]) * kernel_[kernel_pos];
+      out_g += static_cast<float>(input_[static_cast<size_t>(pos + 1)]) * kernel_[kernel_pos];
+      out_b += static_cast<float>(input_[static_cast<size_t>(pos + 2)]) * kernel_[kernel_pos];
     }
   }
 
-  int pos = y * stride + x * 3;
-  result[static_cast<size_t>(pos)] = static_cast<uint8_t>(outR);
-  result[static_cast<size_t>(pos + 1)] = static_cast<uint8_t>(outG);
-  result[static_cast<size_t>(pos + 2)] = static_cast<uint8_t>(outB);
+  const int pos = (y * stride) + (x * 3);
+  result_[static_cast<size_t>(pos)] = static_cast<uint8_t>(out_r);
+  result_[static_cast<size_t>(pos + 1)] = static_cast<uint8_t>(out_g);
+  result_[static_cast<size_t>(pos + 2)] = static_cast<uint8_t>(out_b);
 }
 
 bool KapanovaSImageSmoothingSEQ::RunImpl() {
-  for (int y = 0; y < height; y++) {
-    for (int x = 0; x < width; x++) {
-      SmoothPixel(x, y);
+  for (int idx_y = 0; idx_y < height_; ++idx_y) {
+    for (int idx_x = 0; idx_x < width_; ++idx_x) {
+      SmoothPixel(idx_x, idx_y);
     }
   }
   return true;
 }
 
 bool KapanovaSImageSmoothingSEQ::PostProcessingImpl() {
-  delete[] kernel;
-  kernel = nullptr;
+  delete[] kernel_;
+  kernel_ = nullptr;
 
-  GetOutput() = result;
+  GetOutput() = result_;
   return true;
 }
 

@@ -12,83 +12,83 @@ namespace kapanova_s_image_smoothing {
 KapanovaSImageSmoothingMPI::KapanovaSImageSmoothingMPI(const InType &in) {
   SetTypeOfTask(GetStaticTypeOfTask());
   if (!in.empty()) {
-    GetInput() = in;
+    Getinput_() = in;
   } else {
-    GetInput() = InType();
+    Getinput_() = InType();
   }
-  width = 0;
-  height = 0;
+  width_ = 0;
+  height_ = 0;
 }
 
 bool KapanovaSImageSmoothingMPI::ValidationImpl() {
-  const auto &inputData = GetInput();
-  return !inputData.empty() && !inputData[0].empty();
+  const auto &input_Data = Getinput_();
+  return !input_Data.empty() && !input_Data[0].empty();
 }
 
 bool KapanovaSImageSmoothingMPI::PreProcessingImpl() {
-  const auto &inputData = GetInput();
-  if (inputData.empty() || inputData[0].size() < 4) {
+  const auto &input_Data = Getinput_();
+  if (input_Data.empty() || input_Data[0].size() < 4) {
     return false;
   }
 
-  const auto &data = inputData[0];
-  width = (data[1] << 8) | data[0];
-  height = (data[3] << 8) | data[2];
+  const auto &data = input_Data[0];
+  width_ = (data[1] << 8) | data[0];
+  height_ = (data[3] << 8) | data[2];
 
-  size_t required_pixels = static_cast<size_t>(width) * static_cast<size_t>(height) * 3;
+  size_t required_pixels = static_cast<size_t>(width_) * static_cast<size_t>(height_) * 3;
   size_t total_required_size = 4 + required_pixels;
 
   if (data.size() < total_required_size) {
     return false;
   }
 
-  input.assign(data.begin() + 4, data.end());
-  result = std::vector<uint8_t>(required_pixels);
-  kernel = CreateKernel();
+  input_.assign(data.begin() + 4, data.end());
+  result_ = std::vector<uint8_t>(required_pixels);
+  kernel_ = CreateKernel()();
 
   return true;
 }
 
-std::vector<float> KapanovaSImageSmoothingMPI::CreateKernel() {
-  int size = 2 * radius + 1;
-  std::vector<float> kernel_local(size * size, 0.0f);
-  float sigma = 1.5f;
+std::vector<float> KapanovaSImageSmoothingMPI::CreateKernel()() const {
+  int size = 2 * radius_ + 1;
+  std::vector<float> kernel__local(size * size, 0.0F);
+  float sigma = 1.5F;
   float norm = 0;
 
-  for (int i = -radius; i <= radius; i++) {
-    for (int j = -radius; j <= radius; j++) {
-      kernel_local[static_cast<size_t>((i + radius) * size + j + radius)] =
+  for (int i = -radius_; i <= radius_; i++) {
+    for (int j = -radius_; j <= radius_; j++) {
+      kernel__local[static_cast<size_t>((i + radius_) * size + j + radius_)] =
           std::exp(-(i * i + j * j) / (2 * sigma * sigma));
-      norm += kernel_local[static_cast<size_t>((i + radius) * size + j + radius)];
+      norm += kernel__local[static_cast<size_t>((i + radius_) * size + j + radius_)];
     }
   }
 
   for (int i = 0; i < size * size; i++) {
-    kernel_local[static_cast<size_t>(i)] /= norm;
+    kernel__local[static_cast<size_t>(i)] /= norm;
   }
 
-  return kernel_local;
+  return kernel__local;
 }
 
 void KapanovaSImageSmoothingMPI::SmoothPixel(uint8_t *out, int x, int y) {
-  int stride = width * 3;
-  size_t sizek = static_cast<size_t>(2 * radius + 1);
-  float outR = 0.0f;
-  float outG = 0.0f;
-  float outB = 0.0f;
+  int stride = width_ * 3;
+  size_t sizek = static_cast<size_t>(2 * radius_ + 1);
+  float outR = 0.0F;
+  float outG = 0.0F;
+  float outB = 0.0F;
 
   auto clamp = [](int n, int lo, int hi) { return std::min(std::max(n, lo), hi); };
 
-  for (int ry = -radius; ry <= radius; ry++) {
-    for (int rx = -radius; rx <= radius; rx++) {
-      int idX = clamp(x + rx, 0, width - 1);
-      int idY = clamp(y + ry, 0, height - 1);
+  for (int ry = -radius_; ry <= radius_; ry++) {
+    for (int rx = -radius_; rx <= radius_; rx++) {
+      int idX = clamp(x + rx, 0, width_ - 1);
+      int idY = clamp(y + ry, 0, height_ - 1);
       int pos = idY * stride + idX * 3;
-      int kernelPos = static_cast<int>((ry + radius) * sizek + rx + radius);
+      int kernel_Pos = static_cast<int>((ry + radius_) * sizek + rx + radius_);
 
-      outR += static_cast<float>(input[static_cast<size_t>(pos)]) * kernel[static_cast<size_t>(kernelPos)];
-      outG += static_cast<float>(input[static_cast<size_t>(pos + 1)]) * kernel[static_cast<size_t>(kernelPos)];
-      outB += static_cast<float>(input[static_cast<size_t>(pos + 2)]) * kernel[static_cast<size_t>(kernelPos)];
+      outR += static_cast<float>(input_[static_cast<size_t>(pos)]) * kernel_[static_cast<size_t>(kernel_Pos)];
+      outG += static_cast<float>(input_[static_cast<size_t>(pos + 1)]) * kernel_[static_cast<size_t>(kernel_Pos)];
+      outB += static_cast<float>(input_[static_cast<size_t>(pos + 2)]) * kernel_[static_cast<size_t>(kernel_Pos)];
     }
   }
 
@@ -102,15 +102,15 @@ bool KapanovaSImageSmoothingMPI::RunImpl() {
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-  constexpr int TAG_EXIT = 0;
-  constexpr int TAG_INFO = 1;
-  constexpr int TAG_DATA = 2;
-  constexpr int TAG_RESULT = 3;
+  constexpr int kTagExit = 0;
+  constexpr int kTagInfo = 1;
+  constexpr int kTagData = 2;
+  constexpr int kTagResult_ = 3;
 
   if (size == 1) {
-    for (int y = 0; y < height; y++) {
-      for (int x = 0; x < width; x++) {
-        SmoothPixel(&result[static_cast<size_t>(y * width * 3 + x * 3)], x, y);
+    for (int y = 0; y < height_; y++) {
+      for (int x = 0; x < width_; x++) {
+        SmoothPixel(&result_[static_cast<size_t>(y * width_ * 3 + x * 3)], x, y);
       }
     }
     return true;
@@ -124,35 +124,35 @@ bool KapanovaSImageSmoothingMPI::RunImpl() {
 
     // Отправляем ширину изображения всем процессам
     for (int i = 1; i <= satellites; i++) {
-      MPI_Send(&width, 1, MPI_INT, i, TAG_INFO, MPI_COMM_WORLD);
+      MPI_Send(&width_, 1, MPI_INT, i, kTagInfo, MPI_COMM_WORLD);
     }
 
     int row = 0;
-    while (row < height - 2) {
-      int processes_to_use = std::min(satellites, height - 2 - row);
+    while (row < height_ - 2) {
+      int processes_to_use = std::min(satellites, height_ - 2 - row);
 
       for (int i = 0; i < processes_to_use; i++) {
-        MPI_Send(&noescape, 1, MPI_INT, i + 1, TAG_EXIT, MPI_COMM_WORLD);
+        MPI_Send(&noescape, 1, MPI_INT, i + 1, kTagExit, MPI_COMM_WORLD);
 
         if (row + i == 0) {
-          MPI_Send(&input[0], 2 * width * 3, MPI_UNSIGNED_CHAR, i + 1, TAG_DATA, MPI_COMM_WORLD);
-        } else if (row + i == height - 2) {
-          int start_pos = (height - 2) * width * 3;
-          MPI_Send(&input[static_cast<size_t>(start_pos)], 2 * width * 3, MPI_UNSIGNED_CHAR, i + 1, TAG_DATA,
+          MPI_Send(&input_[0], 2 * width_ * 3, MPI_UNSIGNED_CHAR, i + 1, kTagData, MPI_COMM_WORLD);
+        } else if (row + i == height_ - 2) {
+          int start_pos = (height_ - 2) * width_ * 3;
+          MPI_Send(&input_[static_cast<size_t>(start_pos)], 2 * width_ * 3, MPI_UNSIGNED_CHAR, i + 1, kTagData,
                    MPI_COMM_WORLD);
         } else {
-          int start_pos = (row + i - 1) * width * 3;
-          MPI_Send(&input[static_cast<size_t>(start_pos)], 3 * width * 3, MPI_UNSIGNED_CHAR, i + 1, TAG_DATA,
+          int start_pos = (row + i - 1) * width_ * 3;
+          MPI_Send(&input_[static_cast<size_t>(start_pos)], 3 * width_ * 3, MPI_UNSIGNED_CHAR, i + 1, kTagData,
                    MPI_COMM_WORLD);
         }
       }
 
       // Получаем результаты
       for (int i = 0; i < processes_to_use; i++) {
-        int result_row = row + i + 1;
-        if (result_row > 0 && result_row < height - 1) {
-          int result_pos = result_row * width * 3;
-          MPI_Recv(&result[static_cast<size_t>(result_pos)], width * 3, MPI_UNSIGNED_CHAR, i + 1, TAG_RESULT,
+        int result__row = row + i + 1;
+        if (result__row > 0 && result__row < height_ - 1) {
+          int result__pos = result__row * width_ * 3;
+          MPI_Recv(&result_[static_cast<size_t>(result__pos)], width_ * 3, MPI_UNSIGNED_CHAR, i + 1, kTagResult_,
                    MPI_COMM_WORLD, MPI_STATUS_IGNORE);
         }
       }
@@ -161,53 +161,53 @@ bool KapanovaSImageSmoothingMPI::RunImpl() {
     }
 
     for (int i = 1; i <= satellites; i++) {
-      MPI_Send(&escape, 1, MPI_INT, i, TAG_EXIT, MPI_COMM_WORLD);
+      MPI_Send(&escape, 1, MPI_INT, i, kTagExit, MPI_COMM_WORLD);
     }
 
     // Обрабатываем первую и последнюю строку
-    for (int x = 0; x < width; x++) {
-      SmoothPixel(&result[static_cast<size_t>(x * 3)], x, 0);
-      SmoothPixel(&result[static_cast<size_t>((height - 1) * width * 3 + x * 3)], x, height - 1);
+    for (int x = 0; x < width_; x++) {
+      SmoothPixel(&result_[static_cast<size_t>(x * 3)], x, 0);
+      SmoothPixel(&result_[static_cast<size_t>((height_ - 1) * width_ * 3 + x * 3)], x, height_ - 1);
     }
 
   } else {
-    int local_width = 0;
-    MPI_Recv(&local_width, 1, MPI_INT, 0, TAG_INFO, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    int local_width_ = 0;
+    MPI_Recv(&local_width_, 1, MPI_INT, 0, kTagInfo, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
-    std::vector<uint8_t> local_input;
-    std::vector<uint8_t> local_result(static_cast<size_t>(local_width * 3));
+    std::vector<uint8_t> local_input_;
+    std::vector<uint8_t> local_result_(static_cast<size_t>(local_width_ * 3));
 
     int escape = 0;
 
     while (true) {
-      MPI_Recv(&escape, 1, MPI_INT, 0, TAG_EXIT, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+      MPI_Recv(&escape, 1, MPI_INT, 0, kTagExit, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
       if (escape == 0) {
         break;
       }
 
       MPI_Status status;
-      MPI_Probe(0, TAG_DATA, MPI_COMM_WORLD, &status);
+      MPI_Probe(0, kTagData, MPI_COMM_WORLD, &status);
       int count = 0;
       MPI_Get_count(&status, MPI_UNSIGNED_CHAR, &count);
 
-      local_input.resize(static_cast<size_t>(count));
-      MPI_Recv(local_input.data(), count, MPI_UNSIGNED_CHAR, 0, TAG_DATA, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+      local_input_.resize(static_cast<size_t>(count));
+      MPI_Recv(local_input_.data(), count, MPI_UNSIGNED_CHAR, 0, kTagData, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
       // Определяем, сколько строк получили
-      int rows_received = count / (local_width * 3);
+      int rows_received = count / (local_width_ * 3);
 
       if (rows_received == 3) {
-        for (int x = 0; x < local_width; x++) {
-          SmoothPixel(&local_result[static_cast<size_t>(x * 3)], x, 1);
+        for (int x = 0; x < local_width_; x++) {
+          SmoothPixel(&local_result_[static_cast<size_t>(x * 3)], x, 1);
         }
 
-        MPI_Send(local_result.data(), local_width * 3, MPI_UNSIGNED_CHAR, 0, TAG_RESULT, MPI_COMM_WORLD);
+        MPI_Send(local_result_.data(), local_width_ * 3, MPI_UNSIGNED_CHAR, 0, kTagResult_, MPI_COMM_WORLD);
       } else if (rows_received == 2) {
-        for (int x = 0; x < local_width; x++) {
-          SmoothPixel(&local_result[static_cast<size_t>(x * 3)], x, 0);
+        for (int x = 0; x < local_width_; x++) {
+          SmoothPixel(&local_result_[static_cast<size_t>(x * 3)], x, 0);
         }
 
-        MPI_Send(local_result.data(), local_width * 3, MPI_UNSIGNED_CHAR, 0, TAG_RESULT, MPI_COMM_WORLD);
+        MPI_Send(local_result_.data(), local_width_ * 3, MPI_UNSIGNED_CHAR, 0, kTagResult_, MPI_COMM_WORLD);
       }
     }
   }
@@ -216,7 +216,7 @@ bool KapanovaSImageSmoothingMPI::RunImpl() {
 }
 
 bool KapanovaSImageSmoothingMPI::PostProcessingImpl() {
-  GetOutput() = result;
+  GetOutput() = result_;
   return true;
 }
 

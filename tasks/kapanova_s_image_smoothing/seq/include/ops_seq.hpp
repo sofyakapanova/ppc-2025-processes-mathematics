@@ -1,5 +1,8 @@
 #pragma once
 
+#include <cstdint>
+#include <vector>
+
 #include "kapanova_s_image_smoothing/common/include/common.hpp"
 #include "task/include/task.hpp"
 
@@ -18,15 +21,15 @@ class KapanovaSImageSmoothingSEQ : public BaseTask {
   bool RunImpl() override;
   bool PostProcessingImpl() override;
 
-  void CreateKernel();
+  void CreateKernel()();
   void SmoothPixel(int x, int y);
 
-  int width = 0;
-  int height = 0;
-  std::vector<uint8_t> input;
-  std::vector<uint8_t> result;
-  int radius = 1;
-  float *kernel = nullptr;
+  int width_ = 0;
+  int height_ = 0;
+  std::vector<uint8_t> input_;
+  std::vector<uint8_t> result_;
+  int radius_ = 1;
+  float *kernel_ = nullptr;
 };
 
 }  // namespace kapanova_s_image_smoothing
