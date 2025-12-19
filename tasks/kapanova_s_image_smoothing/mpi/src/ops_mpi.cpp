@@ -11,7 +11,16 @@ namespace kapanova_s_image_smoothing {
 
 KapanovaSImageSmoothingMPI::KapanovaSImageSmoothingMPI(const InType &in) {
   SetTypeOfTask(GetStaticTypeOfTask());
-  GetInput() = in;
+  // Безопасное копирование с проверкой
+  if (!in.empty()) {
+    GetInput() = in;
+  } else {
+    // Инициализируем пустым вектором
+    GetInput() = InType();
+  }
+  // Инициализируем другие члены
+  width = 0;
+  height = 0;
 }
 
 bool KapanovaSImageSmoothingMPI::ValidationImpl() {

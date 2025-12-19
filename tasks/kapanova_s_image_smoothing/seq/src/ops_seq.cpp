@@ -9,7 +9,17 @@ namespace kapanova_s_image_smoothing {
 
 KapanovaSImageSmoothingSEQ::KapanovaSImageSmoothingSEQ(const InType &in) {
   SetTypeOfTask(GetStaticTypeOfTask());
-  GetInput() = in;  // Просто копируем входные данные
+  // Безопасное копирование с проверкой
+  if (!in.empty()) {
+    GetInput() = in;
+  } else {
+    // Инициализируем пустым вектором
+    GetInput() = InType();
+  }
+  // Инициализируем другие члены
+  kernel = nullptr;
+  width = 0;
+  height = 0;
 }
 
 bool KapanovaSImageSmoothingSEQ::ValidationImpl() {
