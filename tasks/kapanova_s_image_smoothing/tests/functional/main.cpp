@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <tuple>
 #include <vector>
@@ -18,8 +19,8 @@ namespace kapanova_s_image_smoothing {
 class KapanovaSImageSmoothingFuncTests : public ppc::util::BaseRunFuncTests<InType, OutType, TestType> {
  public:
   static std::string PrintTestParam(const TestType &test_param) {
-    int width = std::get<1>(test_param);
-    int height = std::get<2>(test_param);
+    const int width = std::get<1>(test_param);
+    const int height = std::get<2>(test_param);
 
     std::string name = "image_" + std::to_string(width) + "x" + std::to_string(height);
 
@@ -38,7 +39,7 @@ class KapanovaSImageSmoothingFuncTests : public ppc::util::BaseRunFuncTests<InTy
 
   bool CheckTestOutputData(OutType &output_data) final {
     if (expected_output_.empty()) {
-      size_t expected_size = static_cast<size_t>(width_) * static_cast<size_t>(height_) * 3;
+      const size_t expected_size = static_cast<size_t>(width_) * static_cast<size_t>(height_) * 3;
       return !output_data.empty() && output_data.size() == expected_size;
     }
     return output_data == expected_output_;

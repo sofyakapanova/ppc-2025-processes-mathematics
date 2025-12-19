@@ -15,6 +15,8 @@
 #include "kapanova_s_image_smoothing/mpi/include/ops_mpi.hpp"
 #include "kapanova_s_image_smoothing/seq/include/ops_seq.hpp"
 
+namespace {
+
 std::vector<uint8_t> CreateTestImageData(int height, int width);
 kapanova_s_image_smoothing::InType FormatInputData(const std::vector<uint8_t> &image_data, int width, int height);
 bool RunMpiTask(kapanova_s_image_smoothing::KapanovaSImageSmoothingMPI &mpi_task);
@@ -217,7 +219,8 @@ TEST(KapanovaSImageSmoothingPerformance, CompareSEQvsMPI) {
   std::cout << "SEQ time: " << seq_duration.count() << " ms\n";
   std::cout << "MPI time: " << mpi_duration.count() << " ms\n";
   std::cout << "Overhead: " << std::fixed << std::setprecision(2)
-            << (static_cast<double>(mpi_duration.count()) / seq_duration.count() - 1.0) * 100.0 << "%\n";
+            << ((static_cast<double>(mpi_duration.count()) / static_cast<double>(seq_duration.count())) - 1.0) * 100.0
+            << "%\n";
 
   EXPECT_EQ(seq_task.GetOutput().size(), mpi_task.GetOutput().size());
   EXPECT_EQ(seq_task.GetOutput(), mpi_task.GetOutput());
@@ -255,3 +258,5 @@ TEST(KapanovaSImageSmoothingPerformance, BoundaryCases) {
 
   EXPECT_TRUE(all_tests_passed);
 }
+
+}  // namespace

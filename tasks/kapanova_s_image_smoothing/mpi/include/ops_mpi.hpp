@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <vector>
 
@@ -21,8 +22,8 @@ class KapanovaSImageSmoothingMPI : public BaseTask {
   bool RunImpl() override;
   bool PostProcessingImpl() override;
 
-  void SmoothPixel(uint8_t *out, int x, int y);
-  std::vector<float> CreateKernel() const;
+  void SmoothPixel(uint8_t *out, int x_coord, int y_coord);
+  [[nodiscard]] std::vector<float> CreateKernel() const;
 
   int width_ = 0;
   int height_ = 0;
