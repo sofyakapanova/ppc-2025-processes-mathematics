@@ -107,6 +107,7 @@ void KapanovaSImageSmoothingMPI::SmoothPixel(uint8_t *out, int x_coord, int y_co
   out[2] = static_cast<uint8_t>(out_b);
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 bool KapanovaSImageSmoothingMPI::RunImpl() {
   int rank = 0;
   int size = 0;
