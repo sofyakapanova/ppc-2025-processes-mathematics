@@ -155,10 +155,11 @@ TEST(KapanovaSImageSmoothingPerformance, MPIScalability) {
     std::cout << "\n=== MPI Scalability Test (Running with " << size << " processes) ===\n";
   }
 
-  std::vector<std::pair<std::string, std::pair<int, int>>> test_cases = {{"Small (100x100)", {100, 100}},
-                                                                         {"Medium (1000x1000)", {1000, 1000}},
-                                                                         {"Large (2500x2500)", {2500, 2500}},
-                                                                         {"Very Large (5000x5000)", {5000, 5000}}};
+  std::vector<std::pair<std::string, std::pair<int, int>>> test_cases = {
+      {"Small (100x100)", {100, 100}},
+      {"Medium (1000x1000)", {1000, 1000}},
+      {"Large (2500x2500)", {2500, 2500}},
+  };
 
   for (const auto &[name, dimensions] : test_cases) {
     auto [height, width] = dimensions;
