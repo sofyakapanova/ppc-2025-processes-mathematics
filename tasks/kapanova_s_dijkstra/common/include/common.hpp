@@ -1,5 +1,6 @@
 #pragma once
 
+#include <string>
 #include <tuple>
 #include <vector>
 
@@ -7,17 +8,17 @@
 
 namespace kapanova_s_dijkstra {
 
-struct GraphCSR {
-  std::vector<int> distances;
-  std::vector<size_t> columns;
-  std::vector<size_t> row_ptrs;
-  size_t num_vertices;
-  int start_vertex;
+struct GraphRepresentation {
+  std::vector<int> row_pointers;
+  std::vector<int> column_indices;
+  std::vector<double> weight_values;
+  int total_nodes = 0;
+  int source_node = 0;
 };
 
-using InType = GraphCSR;
-using OutType = std::vector<int>;
-using TestType = std::tuple<InType, OutType>;
-using BaseTask = ppc::task::Task<InType, OutType>;
+using AlgorithmInput = GraphRepresentation;
+using AlgorithmOutput = std::vector<double>;
+using TestDescription = std::tuple<int, std::string>;
+using BaseSolver = ppc::task::Task<AlgorithmInput, AlgorithmOutput>;
 
 }  // namespace kapanova_s_dijkstra

@@ -5,12 +5,12 @@
 
 namespace kapanova_s_dijkstra {
 
-class KapanovaSDijkstraSEQ : public BaseTask {
+class KapanovaDijkstraCRSSEQ : public BaseSolver {
  public:
   static constexpr ppc::task::TypeOfTask GetStaticTypeOfTask() {
     return ppc::task::TypeOfTask::kSEQ;
   }
-  explicit KapanovaSDijkstraSEQ(const InType &in);
+  explicit KapanovaDijkstraCRSSEQ(const AlgorithmInput &in);
 
  private:
   bool ValidationImpl() override;
