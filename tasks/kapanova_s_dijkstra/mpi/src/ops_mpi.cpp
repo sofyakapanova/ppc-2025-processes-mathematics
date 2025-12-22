@@ -260,8 +260,8 @@ void KapanovaDijkstraCRSMPI::DistributeGraphData() {
   for (int i = 0; i <= local_num_vertices_; ++i) {
     int global_idx = local_start + i;
     if (global_idx <= total_vertices) {
-      local_offsets_[static_cast<std::size_t>(i)] =
-          graph.row_pointers[static_cast<std::size_t>(global_idx)] - graph.row_pointers[static_cast<std::size_t>(local_start)];
+      local_offsets_[static_cast<std::size_t>(i)] = graph.row_pointers[static_cast<std::size_t>(global_idx)] -
+                                                    graph.row_pointers[static_cast<std::size_t>(local_start)];
     } else {
       local_offsets_[static_cast<std::size_t>(i)] = graph.row_pointers[static_cast<std::size_t>(total_vertices)] -
                                                     graph.row_pointers[static_cast<std::size_t>(local_start)];

@@ -61,9 +61,7 @@ TEST_P(KapanovaDijkstraPerfTests, RunPerfModes) {
   ExecuteTest(GetParam());
 }
 
-const auto kAllPerfTasks = ppc::util::MakeAllPerfTasks<AlgorithmInput, 
-                                                       KapanovaDijkstraCRSMPI, 
-                                                       KapanovaDijkstraCRSSEQ>(
+const auto kAllPerfTasks = ppc::util::MakeAllPerfTasks<AlgorithmInput, KapanovaDijkstraCRSMPI, KapanovaDijkstraCRSSEQ>(
     PPC_SETTINGS_kapanova_s_dijkstra);
 
 const auto kGtestValues = ppc::util::TupleToGTestValues(kAllPerfTasks);
