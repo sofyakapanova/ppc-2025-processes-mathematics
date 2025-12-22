@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstddef>
 #include <limits>
+#include <string>  // Added for std::string
 #include <vector>
 
 #include "kapanova_s_dijkstra/common/include/common.hpp"
@@ -38,7 +39,7 @@ void LoadLocalEdges(const GraphData &graph, int local_first, int local_last, int
     local_cols.resize(edge_count);
     local_vals.resize(edge_count);
 
-    for (size_t i = 0; i < local_rows.size(); ++i) {
+    for (std::size_t i = 0; i < local_rows.size(); ++i) {
       int global_idx = local_first + static_cast<int>(i);
       if (global_idx <= total_nodes) {
         local_rows[i] = graph.row_ptr[global_idx] - first_edge;
@@ -52,7 +53,7 @@ void LoadLocalEdges(const GraphData &graph, int local_first, int local_last, int
   } else {
     local_cols.clear();
     local_vals.clear();
-    for (size_t i = 0; i < local_rows.size(); ++i) {
+    for (std::size_t i = 0; i < local_rows.size(); ++i) {
       local_rows[i] = 0;
     }
   }
@@ -91,7 +92,7 @@ bool RunOptimizedDijkstraMPI(const std::vector<int> &local_rows, const std::vect
       int end = local_rows[local_idx + 1];
 
       for (int edge_idx = start; edge_idx < end; ++edge_idx) {
-        if (static_cast<size_t>(edge_idx) >= local_cols.size()) {
+        if (static_cast<std::size_t>(edge_idx) >= local_cols.size()) {
           continue;
         }
 
@@ -101,6 +102,7 @@ bool RunOptimizedDijkstraMPI(const std::vector<int> &local_rows, const std::vect
         }
 
         double new_dist = dist_u + local_vals[edge_idx];
+        // Fixed: Use std::min instead of comparison
         if (new_dist < next_dist[v]) {
           next_dist[v] = new_dist;
           any_changed = true;
@@ -209,31 +211,29 @@ bool KapanovaSDijkstraMPI::RunImpl() {
       std::vector<bool> visited(total_nodes, false);
 
       for (int i = 0; i < total_nodes; ++i) {
-        int u = -1;
+        int current_vertex = -1;
         double min_dist = std::numeric_limits<double>::infinity();
 
-        for (int v = 0; v < total_nodes; ++v) {
-          if (!visited[v] && result[v] < min_dist) {
-            min_dist = result[v];
-            u = v;
+        for (int vertex_idx = 0; vertex_idx < total_nodes; ++vertex_idx) {
+          if (!visited[vertex_idx] && result[vertex_idx] < min_dist) {
+            min_dist = result[vertex_idx];
+            current_vertex = vertex_idx;
           }
         }
 
-        if (u == -1 || min_dist == std::numeric_limits<double>::infinity()) {
+        if (current_vertex == -1 || min_dist == std::numeric_limits<double>::infinity()) {
           break;
         }
 
-        visited[u] = true;
-        int start = graph.row_ptr[u];
-        int end = graph.row_ptr[u + 1];
+        visited[current_vertex] = true;
+        int start = graph.row_ptr[current_vertex];
+        int end = graph.row_ptr[current_vertex + 1];
 
         for (int j = start; j < end; ++j) {
-          int v = graph.col_idx[j];
-          if (v >= 0 && v < total_nodes) {
-            double new_dist = result[u] + graph.weights[j];
-            if (new_dist < result[v]) {
-              result[v] = new_dist;
-            }
+          int neighbor = graph.col_idx[j];
+          if (neighbor >= 0 && neighbor < total_nodes) {
+            double new_dist = result[current_vertex] + graph.weights[j];
+            result[neighbor] = std::min(new_dist, result[neighbor]);
           }
         }
       }
@@ -246,9 +246,7 @@ bool KapanovaSDijkstraMPI::RunImpl() {
 
   PartitionGraph();
 
-  if (local_vertices_ < 0) {
-    local_vertices_ = 0;
-  }
+  local_vertices_ = std::max(local_vertices_, 0);
 
   std::vector<double> global_dist;
   FastInitializeDistances(graph, proc_rank_, proc_count_, global_dist, total_nodes);
