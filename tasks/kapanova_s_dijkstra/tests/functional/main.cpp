@@ -3,7 +3,9 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <functional>
 #include <limits>
+#include <map>
 #include <string>
 #include <tuple>
 #include <vector>
@@ -14,6 +16,195 @@
 #include "util/include/func_test_util.hpp"
 
 namespace kapanova_s_dijkstra {
+
+struct DijkstraTestCase {
+  std::string name;
+  GraphData graph;
+  std::vector<double> expected_distances;
+};
+
+class DijkstraTestFactory {
+ public:
+  static std::map<int, DijkstraTestCase> CreateTestCases() {
+    std::map<int, DijkstraTestCase> cases;
+
+    {
+      DijkstraTestCase tc;
+      tc.name = "simple_graph_4_vertices";
+      tc.graph.vertices_count = 4;
+      tc.graph.start_node = 0;
+      tc.graph.row_ptr = {0, 2, 4, 6, 6};
+      tc.graph.col_idx = {1, 2, 2, 3, 1, 3};
+      tc.graph.weights = {10.0, 5.0, 2.0, 1.0, 3.0, 9.0};
+      tc.expected_distances = {0.0, 8.0, 5.0, 9.0};
+      cases[1] = tc;
+    }
+
+    {
+      DijkstraTestCase tc;
+      tc.name = "no_paths_graph";
+      tc.graph.vertices_count = 4;
+      tc.graph.start_node = 0;
+      tc.graph.row_ptr = {0, 0, 0, 0, 0};
+      tc.graph.col_idx = {};
+      tc.graph.weights = {};
+      tc.expected_distances = {0.0, std::numeric_limits<double>::infinity(), std::numeric_limits<double>::infinity(),
+                               std::numeric_limits<double>::infinity()};
+      cases[2] = tc;
+    }
+
+    {
+      DijkstraTestCase tc;
+      tc.name = "long_chain_graph";
+      tc.graph.vertices_count = 7;
+      tc.graph.start_node = 0;
+      tc.graph.row_ptr = {0, 1, 2, 3, 4, 5, 6, 6};
+      tc.graph.col_idx = {1, 2, 3, 4, 5, 6};
+      tc.graph.weights = {5.0, 3.0, 2.0, 4.0, 6.0, 1.0};
+      tc.expected_distances = {0.0, 5.0, 8.0, 10.0, 14.0, 20.0, 21.0};
+      cases[3] = tc;
+    }
+
+    {
+      DijkstraTestCase tc;
+      tc.name = "linear_graph";
+      tc.graph.vertices_count = 5;
+      tc.graph.start_node = 0;
+      tc.graph.row_ptr = {0, 1, 2, 3, 4, 4};
+      tc.graph.col_idx = {1, 2, 3, 4};
+      tc.graph.weights = {1.0, 2.0, 3.0, 4.0};
+      tc.expected_distances = {0.0, 1.0, 3.0, 6.0, 10.0};
+      cases[4] = tc;
+    }
+
+    {
+      DijkstraTestCase tc;
+      tc.name = "single_node_case";
+      tc.graph.vertices_count = 1;
+      tc.graph.start_node = 0;
+      tc.graph.row_ptr = {0, 0};
+      tc.graph.col_idx = {};
+      tc.graph.weights = {};
+      tc.expected_distances = {0.0};
+      cases[5] = tc;
+    }
+
+    {
+      DijkstraTestCase tc;
+      tc.name = "bidirectional_weighted";
+      tc.graph.vertices_count = 4;
+      tc.graph.start_node = 0;
+      tc.graph.row_ptr = {0, 2, 5, 7, 8};
+      tc.graph.col_idx = {1, 2, 0, 2, 3, 1, 3, 2};
+      tc.graph.weights = {4.0, 2.0, 4.0, 1.0, 5.0, 2.0, 3.0, 5.0};
+      tc.expected_distances = {0.0, 4.0, 2.0, 5.0};
+      cases[6] = tc;
+    }
+
+    {
+      DijkstraTestCase tc;
+      tc.name = "star_topology_graph";
+      tc.graph.vertices_count = 6;
+      tc.graph.start_node = 0;
+      tc.graph.row_ptr = {0, 5, 5, 5, 5, 5, 5};
+      tc.graph.col_idx = {1, 2, 3, 4, 5};
+      tc.graph.weights = {7.0, 9.0, 14.0, 15.0, 10.0};
+      tc.expected_distances = {0.0, 7.0, 9.0, 14.0, 15.0, 10.0};
+      cases[7] = tc;
+    }
+
+    {
+      DijkstraTestCase tc;
+      tc.name = "graph_with_self_loops";
+      tc.graph.vertices_count = 3;
+      tc.graph.start_node = 0;
+      tc.graph.row_ptr = {0, 3, 5, 6};
+      tc.graph.col_idx = {0, 1, 2, 1, 2, 2};
+      tc.graph.weights = {1.0, 4.0, 3.0, 2.0, 1.0, 5.0};
+      tc.expected_distances = {0.0, 4.0, 3.0};
+      cases[8] = tc;
+    }
+
+    {
+      DijkstraTestCase tc;
+      tc.name = "complete_graph_3_vertices";
+      tc.graph.vertices_count = 3;
+      tc.graph.start_node = 0;
+      tc.graph.row_ptr = {0, 2, 4, 6};
+      tc.graph.col_idx = {1, 2, 0, 2, 0, 1};
+      tc.graph.weights = {1.0, 4.0, 1.0, 2.0, 4.0, 2.0};
+      tc.expected_distances = {0.0, 1.0, 3.0};
+      cases[9] = tc;
+    }
+
+    {
+      DijkstraTestCase tc;
+      tc.name = "bidirectional_graph";
+      tc.graph.vertices_count = 3;
+      tc.graph.start_node = 0;
+      tc.graph.row_ptr = {0, 2, 5, 6};
+      tc.graph.col_idx = {1, 2, 0, 2, 0, 1};
+      tc.graph.weights = {5.0, 3.0, 5.0, 1.0, 3.0, 1.0};
+      tc.expected_distances = {0.0, 4.0, 3.0};
+      cases[10] = tc;
+    }
+
+    {
+      DijkstraTestCase tc;
+      tc.name = "disconnected_graph";
+      tc.graph.vertices_count = 6;
+      tc.graph.start_node = 0;
+      tc.graph.row_ptr = {0, 1, 2, 2, 3, 4, 4};
+      tc.graph.col_idx = {1, 0, 4, 3};
+      tc.graph.weights = {2.0, 2.0, 3.0, 4.0};
+      tc.expected_distances = {0.0,
+                               2.0,
+                               std::numeric_limits<double>::infinity(),
+                               std::numeric_limits<double>::infinity(),
+                               std::numeric_limits<double>::infinity(),
+                               std::numeric_limits<double>::infinity()};
+      cases[11] = tc;
+    }
+
+    {
+      DijkstraTestCase tc;
+      tc.name = "zero_weight_edges";
+      tc.graph.vertices_count = 4;
+      tc.graph.start_node = 0;
+      tc.graph.row_ptr = {0, 2, 4, 6, 6};
+      tc.graph.col_idx = {1, 2, 0, 3, 1, 3};
+      tc.graph.weights = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+      tc.expected_distances = {0.0, 0.0, 0.0, 0.0};
+      cases[12] = tc;
+    }
+
+    {
+      DijkstraTestCase tc;
+      tc.name = "uniform_weights_graph";
+      tc.graph.vertices_count = 5;
+      tc.graph.start_node = 0;
+      tc.graph.row_ptr = {0, 2, 4, 6, 8, 8};
+      tc.graph.col_idx = {1, 2, 0, 3, 0, 4, 1, 4};
+      tc.graph.weights = {1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0};
+      tc.expected_distances = {0.0, 1.0, 1.0, 2.0, 2.0};
+      cases[13] = tc;
+    }
+
+    {
+      DijkstraTestCase tc;
+      tc.name = "graph_with_self_loops_2";
+      tc.graph.vertices_count = 3;
+      tc.graph.start_node = 0;
+      tc.graph.row_ptr = {0, 2, 3, 3};
+      tc.graph.col_idx = {1, 2, 2};
+      tc.graph.weights = {4.0, 2.0, 1.0};
+      tc.expected_distances = {0.0, 4.0, 2.0};
+      cases[14] = tc;
+    }
+
+    return cases;
+  }
+};
 
 class KapanovaSDijkstraFuncTests : public ppc::util::BaseRunFuncTests<InType, OutType, TestType> {
  public:
@@ -26,177 +217,22 @@ class KapanovaSDijkstraFuncTests : public ppc::util::BaseRunFuncTests<InType, Ou
     auto param = GetParam();
     int test_case = std::get<0>(std::get<2>(param));
 
-    switch (test_case) {
-      case 1: {
-        GraphData graph;
-        graph.vertices_count = 4;
-        graph.start_node = 0;
-        graph.row_ptr = {0, 2, 4, 6, 6};
-        graph.col_idx = {1, 2, 2, 3, 1, 3};
-        graph.weights = {10.0, 5.0, 2.0, 1.0, 3.0, 9.0};
-        input_data_ = graph;
-        expected_output_ = {0.0, 8.0, 5.0, 9.0};
-        break;
-      }
-      case 2: {
-        GraphData graph;
-        graph.vertices_count = 4;
-        graph.start_node = 0;
-        graph.row_ptr = {0, 0, 0, 0, 0};
-        graph.col_idx = {};
-        graph.weights = {};
-        input_data_ = graph;
-        expected_output_ = {0.0, std::numeric_limits<double>::infinity(), std::numeric_limits<double>::infinity(),
-                            std::numeric_limits<double>::infinity()};
-        break;
-      }
-      case 3: {
-        GraphData graph;
-        graph.vertices_count = 7;
-        graph.start_node = 0;
-        graph.row_ptr = {0, 1, 2, 3, 4, 5, 6, 6};
-        graph.col_idx = {1, 2, 3, 4, 5, 6};
-        graph.weights = {5.0, 3.0, 2.0, 4.0, 6.0, 1.0};
-        input_data_ = graph;
-        expected_output_ = {0.0, 5.0, 8.0, 10.0, 14.0, 20.0, 21.0};
-        break;
-      }
-      case 4: {
-        GraphData graph;
-        graph.vertices_count = 5;
-        graph.start_node = 0;
-        graph.row_ptr = {0, 1, 2, 3, 4, 4};
-        graph.col_idx = {1, 2, 3, 4};
-        graph.weights = {1.0, 2.0, 3.0, 4.0};
-        input_data_ = graph;
-        expected_output_ = {0.0, 1.0, 3.0, 6.0, 10.0};
-        break;
-      }
-      case 5: {
-        GraphData graph;
-        graph.vertices_count = 1;
-        graph.start_node = 0;
-        graph.row_ptr = {0, 0};
-        graph.col_idx = {};
-        graph.weights = {};
-        input_data_ = graph;
-        expected_output_ = {0.0};
-        break;
-      }
-      case 6: {
-        GraphData graph;
-        graph.vertices_count = 4;
-        graph.start_node = 0;
-        graph.row_ptr = {0, 2, 5, 7, 8};
-        graph.col_idx = {1, 2, 0, 2, 3, 1, 3, 2};
-        graph.weights = {4.0, 2.0, 4.0, 1.0, 5.0, 2.0, 3.0, 5.0};
-        input_data_ = graph;
-        expected_output_ = {0.0, 4.0, 2.0, 5.0};
-        break;
-      }
-      case 7: {
-        GraphData graph;
-        graph.vertices_count = 6;
-        graph.start_node = 0;
-        graph.row_ptr = {0, 5, 5, 5, 5, 5, 5};
-        graph.col_idx = {1, 2, 3, 4, 5};
-        graph.weights = {7.0, 9.0, 14.0, 15.0, 10.0};
-        input_data_ = graph;
-        expected_output_ = {0.0, 7.0, 9.0, 14.0, 15.0, 10.0};
-        break;
-      }
-      case 8: {
-        GraphData graph;
-        graph.vertices_count = 3;
-        graph.start_node = 0;
-        graph.row_ptr = {0, 3, 5, 6};
-        graph.col_idx = {0, 1, 2, 1, 2, 2};
-        graph.weights = {1.0, 4.0, 3.0, 2.0, 1.0, 5.0};
-        input_data_ = graph;
-        expected_output_ = {0.0, 4.0, 3.0};
-        break;
-      }
-      case 9: {
-        GraphData graph;
-        graph.vertices_count = 3;
-        graph.start_node = 0;
-        graph.row_ptr = {0, 2, 4, 6};
-        graph.col_idx = {1, 2, 0, 2, 0, 1};
-        graph.weights = {1.0, 4.0, 1.0, 2.0, 4.0, 2.0};
-        input_data_ = graph;
-        expected_output_ = {0.0, 1.0, 3.0};
-        break;
-      }
-      case 10: {
-        GraphData graph;
-        graph.vertices_count = 3;
-        graph.start_node = 0;
-        graph.row_ptr = {0, 2, 5, 6};
-        graph.col_idx = {1, 2, 0, 2, 0, 1};
-        graph.weights = {5.0, 3.0, 5.0, 1.0, 3.0, 1.0};
-        input_data_ = graph;
-        expected_output_ = {0.0, 4.0, 3.0};
-        break;
-      }
-      case 11: {
-        GraphData graph;
-        graph.vertices_count = 6;
-        graph.start_node = 0;
-        graph.row_ptr = {0, 1, 2, 2, 3, 4, 4};
-        graph.col_idx = {1, 0, 4, 3};
-        graph.weights = {2.0, 2.0, 3.0, 4.0};
-        input_data_ = graph;
-        expected_output_ = {0.0,
-                            2.0,
-                            std::numeric_limits<double>::infinity(),
-                            std::numeric_limits<double>::infinity(),
-                            std::numeric_limits<double>::infinity(),
-                            std::numeric_limits<double>::infinity()};
-        break;
-      }
-      case 12: {
-        GraphData graph;
-        graph.vertices_count = 4;
-        graph.start_node = 0;
-        graph.row_ptr = {0, 2, 4, 6, 6};
-        graph.col_idx = {1, 2, 0, 3, 1, 3};
-        graph.weights = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
-        input_data_ = graph;
-        expected_output_ = {0.0, 0.0, 0.0, 0.0};
-        break;
-      }
-      case 13: {
-        GraphData graph;
-        graph.vertices_count = 5;
-        graph.start_node = 0;
-        graph.row_ptr = {0, 2, 4, 6, 8, 8};
-        graph.col_idx = {1, 2, 0, 3, 0, 4, 1, 4};
-        graph.weights = {1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0};
-        input_data_ = graph;
-        expected_output_ = {0.0, 1.0, 1.0, 2.0, 2.0};
-        break;
-      }
-      case 14: {
-        GraphData graph;
-        graph.vertices_count = 3;
-        graph.start_node = 0;
-        graph.row_ptr = {0, 2, 3, 3};
-        graph.col_idx = {1, 2, 2};
-        graph.weights = {4.0, 2.0, 1.0};
-        input_data_ = graph;
-        expected_output_ = {0.0, 4.0, 2.0};
-        break;
-      }
-      default: {
-        GraphData graph;
-        graph.vertices_count = 4;
-        graph.start_node = 0;
-        graph.row_ptr = {0, 2, 4, 6, 6};
-        graph.col_idx = {1, 2, 2, 3, 1, 3};
-        graph.weights = {10.0, 5.0, 2.0, 1.0, 3.0, 9.0};
-        input_data_ = graph;
-        expected_output_ = {0.0, 8.0, 5.0, 9.0};
-      }
+    const auto &test_cases = DijkstraTestFactory::CreateTestCases();
+    auto it = test_cases.find(test_case);
+
+    if (it != test_cases.end()) {
+      const auto &tc = it->second;
+      input_data_ = tc.graph;
+      expected_output_ = tc.expected_distances;
+    } else {
+      GraphData graph;
+      graph.vertices_count = 4;
+      graph.start_node = 0;
+      graph.row_ptr = {0, 2, 4, 6, 6};
+      graph.col_idx = {1, 2, 2, 3, 1, 3};
+      graph.weights = {10.0, 5.0, 2.0, 1.0, 3.0, 9.0};
+      input_data_ = graph;
+      expected_output_ = {0.0, 8.0, 5.0, 9.0};
     }
   }
 
@@ -205,19 +241,21 @@ class KapanovaSDijkstraFuncTests : public ppc::util::BaseRunFuncTests<InType, Ou
       return false;
     }
 
-    for (size_t i = 0; i < output_data.size(); ++i) {
-      bool expected_inf = std::isinf(expected_output_[i]);
-      bool actual_inf = std::isinf(output_data[i]);
+    const double tolerance = 1e-6;
 
-      if (expected_inf && actual_inf) {
+    for (size_t idx = 0; idx < output_data.size(); ++idx) {
+      const bool actual_infinite = std::isinf(output_data[idx]);
+      const bool expected_infinite = std::isinf(expected_output_[idx]);
+
+      if (actual_infinite && expected_infinite) {
         continue;
       }
 
-      if (expected_inf != actual_inf) {
+      if (actual_infinite != expected_infinite) {
         return false;
       }
 
-      if (std::abs(expected_output_[i] - output_data[i]) > 1e-6) {
+      if (std::fabs(expected_output_[idx] - output_data[idx]) > tolerance) {
         return false;
       }
     }
@@ -236,11 +274,11 @@ class KapanovaSDijkstraFuncTests : public ppc::util::BaseRunFuncTests<InType, Ou
 
 namespace {
 
-TEST_P(KapanovaSDijkstraFuncTests, FindShortestPaths) {
+TEST_P(KapanovaSDijkstraFuncTests, ValidateShortestPaths) {
   ExecuteTest(GetParam());
 }
 
-const std::array<TestType, 14> kTestParam = {
+const std::array<TestType, 14> kTestParameters = {
     std::make_tuple(1, "simple_graph_4_vertices"),   std::make_tuple(2, "no_paths_graph"),
     std::make_tuple(3, "long_chain_graph"),          std::make_tuple(4, "linear_graph"),
     std::make_tuple(5, "single_node_case"),          std::make_tuple(6, "bidirectional_weighted"),
@@ -250,15 +288,16 @@ const std::array<TestType, 14> kTestParam = {
     std::make_tuple(13, "uniform_weights_graph"),    std::make_tuple(14, "graph_with_self_loops_2"),
 };
 
-const auto kTestTasksList =
-    std::tuple_cat(ppc::util::AddFuncTask<KapanovaSDijkstraMPI, InType>(kTestParam, PPC_SETTINGS_kapanova_s_dijkstra),
-                   ppc::util::AddFuncTask<KapanovaSDijkstraSEQ, InType>(kTestParam, PPC_SETTINGS_kapanova_s_dijkstra));
+const auto kTestTasksCollection = std::tuple_cat(
+    ppc::util::AddFuncTask<KapanovaSDijkstraMPI, InType>(kTestParameters, PPC_SETTINGS_kapanova_s_dijkstra),
+    ppc::util::AddFuncTask<KapanovaSDijkstraSEQ, InType>(kTestParameters, PPC_SETTINGS_kapanova_s_dijkstra));
 
-const auto kGtestValues = ppc::util::ExpandToValues(kTestTasksList);
+const auto kGTestParameterValues = ppc::util::ExpandToValues(kTestTasksCollection);
 
-const auto kPerfTestName = KapanovaSDijkstraFuncTests::PrintFuncTestName<KapanovaSDijkstraFuncTests>;
+const auto kTestNameFormatter = KapanovaSDijkstraFuncTests::PrintFuncTestName<KapanovaSDijkstraFuncTests>;
 
-INSTANTIATE_TEST_SUITE_P(ShortestPathTests, KapanovaSDijkstraFuncTests, kGtestValues, kPerfTestName);
+INSTANTIATE_TEST_SUITE_P(DijkstraImplementationTests, KapanovaSDijkstraFuncTests, kGTestParameterValues,
+                         kTestNameFormatter);
 
 }  // namespace
 
