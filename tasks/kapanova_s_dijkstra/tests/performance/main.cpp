@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <iostream>
 #include <random>
+#include <string>
 #include <vector>
 
 #include "kapanova_s_dijkstra/common/include/common.hpp"
@@ -24,7 +25,7 @@ GraphData GenerateRandomGraph(int vertices, double density, int seed = 42) {
   std::uniform_real_distribution<double> weight_dist(1.0, 100.0);
   std::uniform_real_distribution<double> prob_dist(0.0, 1.0);
 
-  graph.row_ptr.resize(vertices + 1, 0);
+  graph.row_ptr.resize(static_cast<std::size_t>(vertices) + 1, 0);
 
   int edge_count = 0;
   for (int i = 0; i < vertices; ++i) {
@@ -35,7 +36,7 @@ GraphData GenerateRandomGraph(int vertices, double density, int seed = 42) {
         edge_count++;
       }
     }
-    graph.row_ptr[i + 1] = edge_count;
+    graph.row_ptr[static_cast<std::size_t>(i) + 1] = edge_count;
   }
 
   return graph;
@@ -46,16 +47,16 @@ GraphData CreateChainGraph(int vertices) {
   graph.vertices_count = vertices;
   graph.start_node = 0;
 
-  graph.row_ptr.resize(vertices + 1, 0);
+  graph.row_ptr.resize(static_cast<std::size_t>(vertices) + 1, 0);
 
   int edge_count = 0;
   for (int i = 0; i < vertices - 1; ++i) {
     graph.col_idx.push_back(i + 1);
     graph.weights.push_back(1.0 + (i % 3));
     edge_count++;
-    graph.row_ptr[i + 1] = edge_count;
+    graph.row_ptr[static_cast<std::size_t>(i) + 1] = edge_count;
   }
-  graph.row_ptr[vertices] = edge_count;
+  graph.row_ptr[static_cast<std::size_t>(vertices)] = edge_count;
 
   return graph;
 }
@@ -65,12 +66,12 @@ GraphData CreateGridGraph(int size) {
   graph.vertices_count = size * size;
   graph.start_node = 0;
 
-  graph.row_ptr.resize(size * size + 1, 0);
+  graph.row_ptr.resize((static_cast<std::size_t>(size) * size) + 1, 0);
 
   int edge_count = 0;
   for (int i = 0; i < size; ++i) {
     for (int j = 0; j < size; ++j) {
-      int current = i * size + j;
+      int current = (i * size) + j;
 
       if (j < size - 1) {
         graph.col_idx.push_back(current + 1);
@@ -84,7 +85,7 @@ GraphData CreateGridGraph(int size) {
         edge_count++;
       }
 
-      graph.row_ptr[current + 1] = edge_count;
+      graph.row_ptr[static_cast<std::size_t>(current) + 1] = edge_count;
     }
   }
 
@@ -95,7 +96,7 @@ GraphData CreateGridGraph(int size) {
 
 class KapanovaSDijkstraPerfTests : public ::testing::Test {
  protected:
-  void RunSeqPerformanceTest(const GraphData &graph, const std::string &test_name) {
+  static void RunSeqPerformanceTest(const GraphData &graph, const std::string &test_name) {
     auto start = std::chrono::high_resolution_clock::now();
     KapanovaSDijkstraSEQ seq_task(graph);
 
@@ -109,23 +110,23 @@ class KapanovaSDijkstraPerfTests : public ::testing::Test {
 
     auto result = seq_task.GetOutput();
 
-    EXPECT_EQ(result.size(), static_cast<size_t>(graph.vertices_count));
+    EXPECT_EQ(result.size(), static_cast<std::size_t>(graph.vertices_count));
 
     if (graph.start_node >= 0 && graph.start_node < graph.vertices_count) {
-      EXPECT_NEAR(result[graph.start_node], 0.0, 1e-6);
+      EXPECT_NEAR(result[static_cast<std::size_t>(graph.start_node)], 0.0, 1e-6);
     }
 
     for (const auto &dist : result) {
       EXPECT_GE(dist, -1e-6);
     }
 
-    std::cout << "\n=== " << test_name << " ===" << std::endl;
-    std::cout << "Vertices: " << graph.vertices_count << std::endl;
-    std::cout << "Edges: " << graph.col_idx.size() << std::endl;
-    std::cout << "SEQ time: " << duration.count() << " ms" << std::endl;
+    std::cout << "\n=== " << test_name << " ===\n";
+    std::cout << "Vertices: " << graph.vertices_count << '\n';
+    std::cout << "Edges: " << graph.col_idx.size() << '\n';
+    std::cout << "SEQ time: " << duration.count() << " ms\n";
   }
 
-  void RunMPIPerformanceTest(const GraphData &graph, const std::string &test_name) {
+  static void RunMPIPerformanceTest(const GraphData &graph, const std::string &test_name) {
     auto start = std::chrono::high_resolution_clock::now();
     KapanovaSDijkstraMPI mpi_task(graph);
 
@@ -139,10 +140,10 @@ class KapanovaSDijkstraPerfTests : public ::testing::Test {
 
     auto result = mpi_task.GetOutput();
 
-    EXPECT_EQ(result.size(), static_cast<size_t>(graph.vertices_count));
+    EXPECT_EQ(result.size(), static_cast<std::size_t>(graph.vertices_count));
 
     if (graph.start_node >= 0 && graph.start_node < graph.vertices_count) {
-      EXPECT_NEAR(result[graph.start_node], 0.0, 1e-6);
+      EXPECT_NEAR(result[static_cast<std::size_t>(graph.start_node)], 0.0, 1e-6);
     }
 
     for (const auto &dist : result) {
@@ -152,10 +153,10 @@ class KapanovaSDijkstraPerfTests : public ::testing::Test {
     int rank = 0;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     if (rank == 0) {
-      std::cout << "\n=== " << test_name << " (MPI) ===" << std::endl;
-      std::cout << "Vertices: " << graph.vertices_count << std::endl;
-      std::cout << "Edges: " << graph.col_idx.size() << std::endl;
-      std::cout << "MPI time: " << duration.count() << " ms" << std::endl;
+      std::cout << "\n=== " << test_name << " (MPI) ===\n";
+      std::cout << "Vertices: " << graph.vertices_count << '\n';
+      std::cout << "Edges: " << graph.col_idx.size() << '\n';
+      std::cout << "MPI time: " << duration.count() << " ms\n";
     }
   }
 };

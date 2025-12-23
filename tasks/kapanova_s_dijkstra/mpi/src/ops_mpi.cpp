@@ -6,7 +6,6 @@
 #include <cmath>
 #include <cstddef>
 #include <limits>
-#include <string>  // Added for std::string
 #include <vector>
 
 #include "kapanova_s_dijkstra/common/include/common.hpp"
@@ -18,26 +17,24 @@ void ComputeNodeDistribution(int rank, int size, int total_nodes, int &local_fir
   int base_nodes = total_nodes / size;
   int extra_nodes = total_nodes % size;
 
-  local_first = rank * base_nodes + std::min(rank, extra_nodes);
+  local_first = (rank * base_nodes) + std::min(rank, extra_nodes);
   local_last = local_first + base_nodes + (rank < extra_nodes ? 1 : 0);
   local_nodes = local_last - local_first;
 }
 
 void LoadLocalEdges(const GraphData &graph, int local_first, int local_last, int total_nodes,
                     std::vector<int> &local_cols, std::vector<double> &local_vals, std::vector<int> &local_rows) {
-  if (local_last > total_nodes) {
-    local_last = total_nodes;
-  }
+  local_last = std::min(local_last, total_nodes);
 
   int first_edge = graph.row_ptr[local_first];
   int last_edge = graph.row_ptr[local_last];
   int edge_count = last_edge - first_edge;
 
-  local_rows.resize(local_last - local_first + 1);
+  local_rows.resize(static_cast<std::size_t>(local_last - local_first) + 1);
 
   if (edge_count > 0) {
-    local_cols.resize(edge_count);
-    local_vals.resize(edge_count);
+    local_cols.resize(static_cast<std::size_t>(edge_count));
+    local_vals.resize(static_cast<std::size_t>(edge_count));
 
     for (std::size_t i = 0; i < local_rows.size(); ++i) {
       int global_idx = local_first + static_cast<int>(i);
@@ -53,13 +50,43 @@ void LoadLocalEdges(const GraphData &graph, int local_first, int local_last, int
   } else {
     local_cols.clear();
     local_vals.clear();
-    for (std::size_t i = 0; i < local_rows.size(); ++i) {
-      local_rows[i] = 0;
+    for (int &local_row : local_rows) {
+      local_row = 0;
     }
   }
 }
 
-// Убрали неиспользуемые параметры
+bool ProcessVertex(double dist, const std::vector<int> &local_rows, const std::vector<int> &local_cols,
+                   const std::vector<double> &local_vals, int local_idx, int total_nodes,
+                   std::vector<double> &next_dist) {
+  if (local_idx >= static_cast<int>(local_rows.size()) - 1) {
+    return false;
+  }
+
+  bool changed = false;
+  int start = local_rows[local_idx];
+  int end = local_rows[local_idx + 1];
+
+  for (int edge_idx = start; edge_idx < end; ++edge_idx) {
+    if (static_cast<std::size_t>(edge_idx) >= local_cols.size()) {
+      continue;
+    }
+
+    int neighbor = local_cols[edge_idx];
+    if (neighbor < 0 || neighbor >= total_nodes) {
+      continue;
+    }
+
+    double new_dist = dist + local_vals[edge_idx];
+    if (new_dist < next_dist[static_cast<std::size_t>(neighbor)]) {
+      next_dist[static_cast<std::size_t>(neighbor)] = new_dist;
+      changed = true;
+    }
+  }
+
+  return changed;
+}
+
 bool RunOptimizedDijkstraMPI(const std::vector<int> &local_rows, const std::vector<int> &local_cols,
                              const std::vector<double> &local_vals, int local_first, int local_nodes, int total_nodes,
                              std::vector<double> &global_dist) {
@@ -70,49 +97,27 @@ bool RunOptimizedDijkstraMPI(const std::vector<int> &local_rows, const std::vect
   int iterations = 0;
 
   while (any_changed && iterations < total_nodes) {
-    iterations++;
+    ++iterations;
     any_changed = false;
 
     for (int local_idx = 0; local_idx < local_nodes; ++local_idx) {
-      int u = local_first + local_idx;
-      if (u >= total_nodes) {
+      int vertex = local_first + local_idx;
+      if (vertex >= total_nodes) {
         continue;
       }
 
-      double dist_u = current_dist[u];
-      if (dist_u == std::numeric_limits<double>::infinity()) {
+      double dist_vertex = current_dist[static_cast<std::size_t>(vertex)];
+      if (dist_vertex == std::numeric_limits<double>::infinity()) {
         continue;
       }
 
-      if (local_idx >= static_cast<int>(local_rows.size()) - 1) {
-        continue;
-      }
-
-      int start = local_rows[local_idx];
-      int end = local_rows[local_idx + 1];
-
-      for (int edge_idx = start; edge_idx < end; ++edge_idx) {
-        if (static_cast<std::size_t>(edge_idx) >= local_cols.size()) {
-          continue;
-        }
-
-        int v = local_cols[edge_idx];
-        if (v < 0 || v >= total_nodes) {
-          continue;
-        }
-
-        double new_dist = dist_u + local_vals[edge_idx];
-        // Fixed: Use std::min instead of comparison
-        if (new_dist < next_dist[v]) {
-          next_dist[v] = new_dist;
-          any_changed = true;
-        }
+      if (ProcessVertex(dist_vertex, local_rows, local_cols, local_vals, local_idx, total_nodes, next_dist)) {
+        any_changed = true;
       }
     }
 
-    // КРИТИЧЕСКИЙ МОМЕНТ: Проверяем размеры перед Allreduce
-    if (static_cast<int>(next_dist.size()) != total_nodes) {
-      next_dist.resize(total_nodes, std::numeric_limits<double>::infinity());
+    if (static_cast<std::size_t>(total_nodes) != next_dist.size()) {
+      next_dist.resize(static_cast<std::size_t>(total_nodes), std::numeric_limits<double>::infinity());
     }
 
     MPI_Allreduce(MPI_IN_PLACE, next_dist.data(), total_nodes, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
@@ -134,13 +139,13 @@ void FastInitializeDistances(const GraphData &graph, int rank, int size, std::ve
                              int total_nodes) {
   const int source = graph.start_node;
 
-  global_dist.resize(total_nodes, std::numeric_limits<double>::infinity());
+  global_dist.resize(static_cast<std::size_t>(total_nodes), std::numeric_limits<double>::infinity());
 
   int source_owner = source % size;
 
   if (rank == source_owner) {
     if (source >= 0 && source < total_nodes) {
-      global_dist[source] = 0.0;
+      global_dist[static_cast<std::size_t>(source)] = 0.0;
     }
   }
 
@@ -183,10 +188,8 @@ void KapanovaSDijkstraMPI::PartitionGraph() {
   int local_last = 0;
   ComputeNodeDistribution(proc_rank_, proc_count_, total_nodes, local_first, local_last, local_vertices_);
 
-  if (local_last > total_nodes) {
-    local_last = total_nodes;
-    local_vertices_ = local_last - local_first;
-  }
+  local_last = std::min(local_last, total_nodes);
+  local_vertices_ = local_last - local_first;
 
   LoadLocalEdges(graph, local_first, local_last, total_nodes, local_col_idx_, local_weights_, local_row_ptr_);
 }
@@ -203,20 +206,21 @@ bool KapanovaSDijkstraMPI::RunImpl() {
   MPI_Bcast(&total_nodes, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
   if (total_nodes < 1000 && proc_count_ > 2) {
-    std::vector<double> result(total_nodes, std::numeric_limits<double>::infinity());
+    std::vector<double> result(static_cast<std::size_t>(total_nodes), std::numeric_limits<double>::infinity());
 
     if (proc_rank_ == 0) {
-      result[graph.start_node] = 0.0;
+      result[static_cast<std::size_t>(graph.start_node)] = 0.0;
 
-      std::vector<bool> visited(total_nodes, false);
+      std::vector<bool> visited(static_cast<std::size_t>(total_nodes), false);
 
       for (int i = 0; i < total_nodes; ++i) {
         int current_vertex = -1;
         double min_dist = std::numeric_limits<double>::infinity();
 
         for (int vertex_idx = 0; vertex_idx < total_nodes; ++vertex_idx) {
-          if (!visited[vertex_idx] && result[vertex_idx] < min_dist) {
-            min_dist = result[vertex_idx];
+          if (!visited[static_cast<std::size_t>(vertex_idx)] &&
+              result[static_cast<std::size_t>(vertex_idx)] < min_dist) {
+            min_dist = result[static_cast<std::size_t>(vertex_idx)];
             current_vertex = vertex_idx;
           }
         }
@@ -225,15 +229,15 @@ bool KapanovaSDijkstraMPI::RunImpl() {
           break;
         }
 
-        visited[current_vertex] = true;
+        visited[static_cast<std::size_t>(current_vertex)] = true;
         int start = graph.row_ptr[current_vertex];
         int end = graph.row_ptr[current_vertex + 1];
 
         for (int j = start; j < end; ++j) {
           int neighbor = graph.col_idx[j];
           if (neighbor >= 0 && neighbor < total_nodes) {
-            double new_dist = result[current_vertex] + graph.weights[j];
-            result[neighbor] = std::min(new_dist, result[neighbor]);
+            double new_dist = result[static_cast<std::size_t>(current_vertex)] + graph.weights[j];
+            result[static_cast<std::size_t>(neighbor)] = std::min(new_dist, result[static_cast<std::size_t>(neighbor)]);
           }
         }
       }
