@@ -87,41 +87,54 @@ bool ProcessVertex(double dist, const std::vector<int> &local_rows, const std::v
   return changed;
 }
 
+bool ProcessLocalVertices(const std::vector<double> &current_dist, const std::vector<int> &local_rows,
+                          const std::vector<int> &local_cols, const std::vector<double> &local_vals, int local_first,
+                          int local_nodes, int total_nodes, std::vector<double> &next_dist) {
+  bool any_changed = false;
+
+  for (int local_idx = 0; local_idx < local_nodes; ++local_idx) {
+    int vertex = local_first + local_idx;
+    if (vertex >= total_nodes) {
+      continue;
+    }
+
+    double dist_vertex = current_dist[static_cast<std::size_t>(vertex)];
+    if (dist_vertex == std::numeric_limits<double>::infinity()) {
+      continue;
+    }
+
+    if (ProcessVertex(dist_vertex, local_rows, local_cols, local_vals, local_idx, total_nodes, next_dist)) {
+      any_changed = true;
+    }
+  }
+
+  return any_changed;
+}
+
+void SynchronizeDistances(std::vector<double> &next_dist, int total_nodes) {
+  if (static_cast<std::size_t>(total_nodes) != next_dist.size()) {
+    next_dist.resize(static_cast<std::size_t>(total_nodes), std::numeric_limits<double>::infinity());
+  }
+
+  MPI_Allreduce(MPI_IN_PLACE, next_dist.data(), total_nodes, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
+}
+
 bool RunOptimizedDijkstraMPI(const std::vector<int> &local_rows, const std::vector<int> &local_cols,
                              const std::vector<double> &local_vals, int local_first, int local_nodes, int total_nodes,
                              std::vector<double> &global_dist) {
   std::vector<double> current_dist = global_dist;
   std::vector<double> next_dist = global_dist;
 
-  bool any_changed = true;
   int iterations = 0;
+  bool any_changed = true;
 
   while (any_changed && iterations < total_nodes) {
     ++iterations;
-    any_changed = false;
 
-    for (int local_idx = 0; local_idx < local_nodes; ++local_idx) {
-      int vertex = local_first + local_idx;
-      if (vertex >= total_nodes) {
-        continue;
-      }
+    any_changed = ProcessLocalVertices(current_dist, local_rows, local_cols, local_vals, local_first, local_nodes,
+                                       total_nodes, next_dist);
 
-      double dist_vertex = current_dist[static_cast<std::size_t>(vertex)];
-      if (dist_vertex == std::numeric_limits<double>::infinity()) {
-        continue;
-      }
-
-      if (ProcessVertex(dist_vertex, local_rows, local_cols, local_vals, local_idx, total_nodes, next_dist)) {
-        any_changed = true;
-      }
-    }
-
-    if (static_cast<std::size_t>(total_nodes) != next_dist.size()) {
-      next_dist.resize(static_cast<std::size_t>(total_nodes), std::numeric_limits<double>::infinity());
-    }
-
-    MPI_Allreduce(MPI_IN_PLACE, next_dist.data(), total_nodes, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
-
+    SynchronizeDistances(next_dist, total_nodes);
     std::swap(current_dist, next_dist);
 
     int global_changed = any_changed ? 1 : 0;
@@ -150,6 +163,44 @@ void FastInitializeDistances(const GraphData &graph, int rank, int size, std::ve
   }
 
   MPI_Bcast(global_dist.data(), total_nodes, MPI_DOUBLE, source_owner, MPI_COMM_WORLD);
+}
+
+std::vector<double> SequentialDijkstra(const GraphData &graph, int total_nodes) {
+  std::vector<double> result(static_cast<std::size_t>(total_nodes), std::numeric_limits<double>::infinity());
+  result[static_cast<std::size_t>(graph.start_node)] = 0.0;
+
+  std::vector<bool> visited(static_cast<std::size_t>(total_nodes), false);
+
+  for (int i = 0; i < total_nodes; ++i) {
+    int current_vertex = -1;
+    double min_dist = std::numeric_limits<double>::infinity();
+
+    for (int vertex_idx = 0; vertex_idx < total_nodes; ++vertex_idx) {
+      std::size_t idx = static_cast<std::size_t>(vertex_idx);
+      if (!visited[idx] && result[idx] < min_dist) {
+        min_dist = result[idx];
+        current_vertex = vertex_idx;
+      }
+    }
+
+    if (current_vertex == -1 || min_dist == std::numeric_limits<double>::infinity()) {
+      break;
+    }
+
+    visited[static_cast<std::size_t>(current_vertex)] = true;
+    int start = graph.row_ptr[current_vertex];
+    int end = graph.row_ptr[current_vertex + 1];
+
+    for (int j = start; j < end; ++j) {
+      int neighbor = graph.col_idx[j];
+      if (neighbor >= 0 && neighbor < total_nodes) {
+        double new_dist = result[static_cast<std::size_t>(current_vertex)] + graph.weights[j];
+        result[static_cast<std::size_t>(neighbor)] = std::min(new_dist, result[static_cast<std::size_t>(neighbor)]);
+      }
+    }
+  }
+
+  return result;
 }
 
 }  // namespace
@@ -206,41 +257,12 @@ bool KapanovaSDijkstraMPI::RunImpl() {
   MPI_Bcast(&total_nodes, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
   if (total_nodes < 1000 && proc_count_ > 2) {
-    std::vector<double> result(static_cast<std::size_t>(total_nodes), std::numeric_limits<double>::infinity());
+    std::vector<double> result;
 
     if (proc_rank_ == 0) {
-      result[static_cast<std::size_t>(graph.start_node)] = 0.0;
-
-      std::vector<bool> visited(static_cast<std::size_t>(total_nodes), false);
-
-      for (int i = 0; i < total_nodes; ++i) {
-        int current_vertex = -1;
-        double min_dist = std::numeric_limits<double>::infinity();
-
-        for (int vertex_idx = 0; vertex_idx < total_nodes; ++vertex_idx) {
-          if (!visited[static_cast<std::size_t>(vertex_idx)] &&
-              result[static_cast<std::size_t>(vertex_idx)] < min_dist) {
-            min_dist = result[static_cast<std::size_t>(vertex_idx)];
-            current_vertex = vertex_idx;
-          }
-        }
-
-        if (current_vertex == -1 || min_dist == std::numeric_limits<double>::infinity()) {
-          break;
-        }
-
-        visited[static_cast<std::size_t>(current_vertex)] = true;
-        int start = graph.row_ptr[current_vertex];
-        int end = graph.row_ptr[current_vertex + 1];
-
-        for (int j = start; j < end; ++j) {
-          int neighbor = graph.col_idx[j];
-          if (neighbor >= 0 && neighbor < total_nodes) {
-            double new_dist = result[static_cast<std::size_t>(current_vertex)] + graph.weights[j];
-            result[static_cast<std::size_t>(neighbor)] = std::min(new_dist, result[static_cast<std::size_t>(neighbor)]);
-          }
-        }
-      }
+      result = SequentialDijkstra(graph, total_nodes);
+    } else {
+      result.resize(static_cast<std::size_t>(total_nodes));
     }
 
     MPI_Bcast(result.data(), total_nodes, MPI_DOUBLE, 0, MPI_COMM_WORLD);

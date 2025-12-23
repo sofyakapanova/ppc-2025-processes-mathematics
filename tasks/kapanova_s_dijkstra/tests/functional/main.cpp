@@ -3,7 +3,6 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
-#include <functional>
 #include <limits>
 #include <map>
 #include <string>
