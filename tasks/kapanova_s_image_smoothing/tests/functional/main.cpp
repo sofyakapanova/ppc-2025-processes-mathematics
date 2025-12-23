@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -38,11 +39,39 @@ class KapanovaSImageSmoothingFuncTests : public ppc::util::BaseRunFuncTests<InTy
   }
 
   bool CheckTestOutputData(OutType &output_data) final {
-    if (expected_output_.empty()) {
-      const size_t expected_size = static_cast<size_t>(width_) * static_cast<size_t>(height_) * 3;
-      return !output_data.empty() && output_data.size() == expected_size;
+    // Базовые проверки размера
+    const size_t expected_size = static_cast<size_t>(width_) * static_cast<size_t>(height_) * 3;
+    if (output_data.empty() || output_data.size() != expected_size) {
+      return false;
     }
-    return output_data == expected_output_;
+
+    // Если есть эталонный результат - сравниваем с ним
+    if (!expected_output_.empty()) {
+      return output_data == expected_output_;
+    }
+
+    // Если нет эталонного результата, проверяем корректность алгоритма
+
+    // 1. Проверка диапазона значений (0-255 для uint8_t)
+    for (const auto &value : output_data) {
+      if (value > 255) {
+        return false;  // uint8_t автоматически в диапазоне, но на всякий случай
+      }
+    }
+
+    // 2. Для одноцветного изображения результат должен остаться одноцветным
+    // (проверяем только если изображение действительно одноцветное)
+    if (IsConstantImage(image_data_)) {
+      return CheckConstantImage(output_data);
+    }
+
+    // 3. Проверка, что сглаживание действительно произошло
+    // (изображение должно стать менее контрастным)
+    if (width_ > 2 && height_ > 2) {  // Для достаточно больших изображений
+      return CheckSmoothingEffect(image_data_, output_data);
+    }
+
+    return true;
   }
 
   InType GetTestInputData() final {
@@ -66,6 +95,90 @@ class KapanovaSImageSmoothingFuncTests : public ppc::util::BaseRunFuncTests<InTy
   int width_ = 0;
   int height_ = 0;
   std::vector<uint8_t> expected_output_;
+
+  // Проверка, является ли изображение одноцветным
+  bool IsConstantImage(const std::vector<uint8_t> &image) const {
+    if (image.size() < 3) {
+      return true;
+    }
+
+    const uint8_t first_pixel_r = image[0];
+    const uint8_t first_pixel_g = image[1];
+    const uint8_t first_pixel_b = image[2];
+
+    for (size_t i = 3; i < image.size(); i += 3) {
+      if (image[i] != first_pixel_r || image[i + 1] != first_pixel_g || image[i + 2] != first_pixel_b) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  // Проверка, что результат для одноцветного изображения остался одноцветным
+  bool CheckConstantImage(const std::vector<uint8_t> &output) const {
+    if (output.size() < 3) {
+      return true;
+    }
+
+    const uint8_t first_pixel_r = output[0];
+    const uint8_t first_pixel_g = output[1];
+    const uint8_t first_pixel_b = output[2];
+
+    // Допуск для операций с плавающей точкой
+    constexpr int tolerance = 2;
+
+    for (size_t i = 3; i < output.size(); i += 3) {
+      if (std::abs(static_cast<int>(output[i]) - static_cast<int>(first_pixel_r)) > tolerance ||
+          std::abs(static_cast<int>(output[i + 1]) - static_cast<int>(first_pixel_g)) > tolerance ||
+          std::abs(static_cast<int>(output[i + 2]) - static_cast<int>(first_pixel_b)) > tolerance) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  // Проверка, что изображение действительно сглажено
+  // (уменьшилась вариативность между соседними пикселями)
+  bool CheckSmoothingEffect(const std::vector<uint8_t> &input, const std::vector<uint8_t> &output) const {
+    if (input.size() != output.size()) {
+      return false;
+    }
+
+    // Рассчитываем среднюю абсолютную разницу между соседними пикселями
+    double input_gradient = 0.0;
+    double output_gradient = 0.0;
+
+    // Для простоты проверяем только горизонтальные соседи
+    size_t checked_pairs = 0;
+
+    for (int y = 0; y < height_; ++y) {
+      for (int x = 0; x < width_ - 1; ++x) {
+        const size_t idx1 = static_cast<size_t>((y * width_ + x) * 3);
+        const size_t idx2 = static_cast<size_t>((y * width_ + (x + 1)) * 3);
+
+        // Рассчитываем яркость по формуле Y = 0.299*R + 0.587*G + 0.114*B
+        double brightness1_input = 0.299 * input[idx1] + 0.587 * input[idx1 + 1] + 0.114 * input[idx1 + 2];
+        double brightness2_input = 0.299 * input[idx2] + 0.587 * input[idx2 + 1] + 0.114 * input[idx2 + 2];
+
+        double brightness1_output = 0.299 * output[idx1] + 0.587 * output[idx1 + 1] + 0.114 * output[idx1 + 2];
+        double brightness2_output = 0.299 * output[idx2] + 0.587 * output[idx2 + 1] + 0.114 * output[idx2 + 2];
+
+        input_gradient += std::abs(brightness1_input - brightness2_input);
+        output_gradient += std::abs(brightness1_output - brightness2_output);
+        checked_pairs++;
+      }
+    }
+
+    if (checked_pairs == 0) {
+      return true;
+    }
+
+    input_gradient /= checked_pairs;
+    output_gradient /= checked_pairs;
+
+    // После сглаживания градиент должен уменьшиться (или остаться примерно таким же для уже гладких изображений)
+    return output_gradient <= input_gradient * 1.1;  // 10% допуск
+  }
 };
 
 namespace {

@@ -1,11 +1,9 @@
+#include <MPI.h>
 #include <gtest/gtest.h>
-#include <mpi.h>
 
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <iomanip>
-#include <iostream>
 #include <random>
 #include <string>
 #include <utility>
@@ -70,9 +68,6 @@ TEST(KapanovaSImageSmoothingPerformance, SequentialBaseline) {
   EXPECT_TRUE(RunSeqTask(sequential_task));
   auto end_time = std::chrono::high_resolution_clock::now();
 
-  auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
-  std::cout << "SEQ Baseline (2500x2500): " << duration.count() << " ms\n";
-
   EXPECT_FALSE(sequential_task.GetOutput().empty());
 }
 
@@ -83,9 +78,6 @@ TEST(KapanovaSImageSmoothingPerformance, MPISingleProcess) {
   MPI_Comm_size(MPI_COMM_WORLD, &size);
 
   if (size != 1) {
-    if (rank == 0) {
-      std::cout << "Note: MPISingleProcess skipped (requires exactly 1 process, got " << size << ")\n";
-    }
     return;
   }
 
@@ -100,9 +92,6 @@ TEST(KapanovaSImageSmoothingPerformance, MPISingleProcess) {
   auto start_time = std::chrono::high_resolution_clock::now();
   EXPECT_TRUE(RunMpiTask(mpi_task));
   auto end_time = std::chrono::high_resolution_clock::now();
-
-  auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
-  std::cout << "MPI Single Process (2500x2500): " << duration.count() << " ms\n";
 
   EXPECT_FALSE(mpi_task.GetOutput().empty());
 }
@@ -114,9 +103,6 @@ TEST(KapanovaSImageSmoothingPerformance, MPIMultiProcess) {
   MPI_Comm_size(MPI_COMM_WORLD, &size);
 
   if (size == 1) {
-    if (rank == 0) {
-      std::cout << "Note: MPIMultiProcess skipped (requires 2+ processes, got " << size << ")\n";
-    }
     return;
   }
 
@@ -136,12 +122,6 @@ TEST(KapanovaSImageSmoothingPerformance, MPIMultiProcess) {
   MPI_Barrier(MPI_COMM_WORLD);
   auto end_time = std::chrono::high_resolution_clock::now();
 
-  if (rank == 0) {
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
-    std::cout << "MPI with " << size << " processes (2500x2500): " << duration.count() << " ms\n";
-    EXPECT_FALSE(mpi_task.GetOutput().empty());
-  }
-
   EXPECT_FALSE(mpi_task.GetOutput().empty());
 }
 
@@ -150,10 +130,6 @@ TEST(KapanovaSImageSmoothingPerformance, MPIScalability) {
   int size = 0;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   MPI_Comm_size(MPI_COMM_WORLD, &size);
-
-  if (rank == 0) {
-    std::cout << "\n=== MPI Scalability Test (Running with " << size << " processes) ===\n";
-  }
 
   std::vector<std::pair<std::string, std::pair<int, int>>> test_cases = {
       {"Small (100x100)", {100, 100}},
@@ -176,11 +152,6 @@ TEST(KapanovaSImageSmoothingPerformance, MPIScalability) {
     MPI_Barrier(MPI_COMM_WORLD);
     auto end_time = std::chrono::high_resolution_clock::now();
 
-    if (rank == 0) {
-      auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
-      std::cout << name << ": " << duration.count() << " ms\n";
-    }
-
     EXPECT_FALSE(mpi_task.GetOutput().empty());
   }
 }
@@ -192,9 +163,6 @@ TEST(KapanovaSImageSmoothingPerformance, CompareSEQvsMPI) {
   MPI_Comm_size(MPI_COMM_WORLD, &size);
 
   if (size != 1) {
-    if (rank == 0) {
-      std::cout << "Note: CompareSEQvsMPI skipped (requires exactly 1 process, got " << size << ")\n";
-    }
     return;
   }
 
@@ -205,23 +173,10 @@ TEST(KapanovaSImageSmoothingPerformance, CompareSEQvsMPI) {
   auto formatted_input = FormatInputData(test_image, image_width, image_height);
 
   kapanova_s_image_smoothing::KapanovaSImageSmoothingSEQ seq_task(formatted_input);
-  auto seq_start = std::chrono::high_resolution_clock::now();
   EXPECT_TRUE(RunSeqTask(seq_task));
-  auto seq_end = std::chrono::high_resolution_clock::now();
-  auto seq_duration = std::chrono::duration_cast<std::chrono::milliseconds>(seq_end - seq_start);
 
   kapanova_s_image_smoothing::KapanovaSImageSmoothingMPI mpi_task(formatted_input);
-  auto mpi_start = std::chrono::high_resolution_clock::now();
   EXPECT_TRUE(RunMpiTask(mpi_task));
-  auto mpi_end = std::chrono::high_resolution_clock::now();
-  auto mpi_duration = std::chrono::duration_cast<std::chrono::milliseconds>(mpi_end - mpi_start);
-
-  std::cout << "\n=== SEQ vs MPI Comparison (400x400, 1 process) ===\n";
-  std::cout << "SEQ time: " << seq_duration.count() << " ms\n";
-  std::cout << "MPI time: " << mpi_duration.count() << " ms\n";
-  std::cout << "Overhead: " << std::fixed << std::setprecision(2)
-            << ((static_cast<double>(mpi_duration.count()) / static_cast<double>(seq_duration.count())) - 1.0) * 100.0
-            << "%\n";
 
   EXPECT_EQ(seq_task.GetOutput().size(), mpi_task.GetOutput().size());
   EXPECT_EQ(seq_task.GetOutput(), mpi_task.GetOutput());
@@ -249,13 +204,6 @@ TEST(KapanovaSImageSmoothingPerformance, BoundaryCases) {
   auto formatted_input3 = FormatInputData(test_image3, 100, 10);
   kapanova_s_image_smoothing::KapanovaSImageSmoothingMPI mpi_task3(formatted_input3);
   all_tests_passed = all_tests_passed && RunMpiTask(mpi_task3);
-
-  if (rank == 0) {
-    std::cout << "\n=== Boundary Cases Test ===\n";
-    std::cout << "2x2 image: " << (mpi_task1.GetOutput().empty() ? "FAIL" : "OK") << "\n";
-    std::cout << "10x100 image: " << (mpi_task2.GetOutput().empty() ? "FAIL" : "OK") << "\n";
-    std::cout << "100x10 image: " << (mpi_task3.GetOutput().empty() ? "FAIL" : "OK") << "\n";
-  }
 
   EXPECT_TRUE(all_tests_passed);
 }
