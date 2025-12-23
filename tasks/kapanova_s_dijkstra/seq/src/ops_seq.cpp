@@ -5,6 +5,7 @@
 #include <functional>
 #include <limits>
 #include <queue>
+#include <ranges>
 #include <utility>
 #include <vector>
 
@@ -33,8 +34,8 @@ bool KapanovaSDijkstraSEQ::ValidationImpl() {
     return false;
   }
 
-  // Проверка на отрицательные веса с использованием std::all_of
-  return std::all_of(input.weights.begin(), input.weights.end(), [](double weight) { return weight >= 0.0; });
+  // Проверка на отрицательные веса с использованием std::ranges::all_of
+  return std::ranges::all_of(input.weights, [](double weight) { return weight >= 0.0; });
 }
 
 bool KapanovaSDijkstraSEQ::PreProcessingImpl() {
@@ -57,7 +58,7 @@ bool KapanovaSDijkstraSEQ::RunImpl() {
     auto [current_dist, u] = min_heap.top();
     min_heap.pop();
 
-    std::size_t u_idx = static_cast<std::size_t>(u);
+    auto u_idx = static_cast<std::size_t>(u);
     if (processed[u_idx]) {
       continue;
     }
@@ -70,7 +71,7 @@ bool KapanovaSDijkstraSEQ::RunImpl() {
       int v = graph.col_idx[idx];
       double w = graph.weights[idx];
 
-      std::size_t v_idx = static_cast<std::size_t>(v);
+      auto v_idx = static_cast<std::size_t>(v);
       if (!processed[v_idx]) {
         double new_dist = current_dist + w;
         if (new_dist < distances[v_idx]) {

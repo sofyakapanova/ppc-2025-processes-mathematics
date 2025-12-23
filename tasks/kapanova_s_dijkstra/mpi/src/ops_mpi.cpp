@@ -165,42 +165,54 @@ void FastInitializeDistances(const GraphData &graph, int rank, int size, std::ve
   MPI_Bcast(global_dist.data(), total_nodes, MPI_DOUBLE, source_owner, MPI_COMM_WORLD);
 }
 
+int FindMinVertex(const std::vector<double> &distances, const std::vector<bool> &visited, int total_nodes) {
+  int min_vertex = -1;
+  double min_distance = std::numeric_limits<double>::infinity();
+
+  for (int vertex = 0; vertex < total_nodes; ++vertex) {
+    auto vertex_idx = static_cast<std::size_t>(vertex);
+    if (!visited[vertex_idx] && distances[vertex_idx] < min_distance) {
+      min_distance = distances[vertex_idx];
+      min_vertex = vertex;
+    }
+  }
+
+  return min_vertex;
+}
+
+void RelaxNeighbors(int current_vertex, const std::vector<double> &distances, const GraphData &graph,
+                    std::vector<double> &updated_distances, int total_nodes) {
+  int start_edge = graph.row_ptr[current_vertex];
+  int end_edge = graph.row_ptr[current_vertex + 1];
+
+  for (int edge_idx = start_edge; edge_idx < end_edge; ++edge_idx) {
+    int neighbor = graph.col_idx[edge_idx];
+    if (neighbor >= 0 && neighbor < total_nodes) {
+      double new_distance = distances[static_cast<std::size_t>(current_vertex)] + graph.weights[edge_idx];
+      auto neighbor_idx = static_cast<std::size_t>(neighbor);
+      updated_distances[neighbor_idx] = std::min(new_distance, updated_distances[neighbor_idx]);
+    }
+  }
+}
+
 std::vector<double> SequentialDijkstra(const GraphData &graph, int total_nodes) {
-  std::vector<double> result(static_cast<std::size_t>(total_nodes), std::numeric_limits<double>::infinity());
-  result[static_cast<std::size_t>(graph.start_node)] = 0.0;
+  std::vector<double> distances(static_cast<std::size_t>(total_nodes), std::numeric_limits<double>::infinity());
+  distances[static_cast<std::size_t>(graph.start_node)] = 0.0;
 
   std::vector<bool> visited(static_cast<std::size_t>(total_nodes), false);
 
-  for (int i = 0; i < total_nodes; ++i) {
-    int current_vertex = -1;
-    double min_dist = std::numeric_limits<double>::infinity();
+  for (int iteration = 0; iteration < total_nodes; ++iteration) {
+    int current_vertex = FindMinVertex(distances, visited, total_nodes);
 
-    for (int vertex_idx = 0; vertex_idx < total_nodes; ++vertex_idx) {
-      std::size_t idx = static_cast<std::size_t>(vertex_idx);
-      if (!visited[idx] && result[idx] < min_dist) {
-        min_dist = result[idx];
-        current_vertex = vertex_idx;
-      }
-    }
-
-    if (current_vertex == -1 || min_dist == std::numeric_limits<double>::infinity()) {
+    if (current_vertex == -1) {
       break;
     }
 
     visited[static_cast<std::size_t>(current_vertex)] = true;
-    int start = graph.row_ptr[current_vertex];
-    int end = graph.row_ptr[current_vertex + 1];
-
-    for (int j = start; j < end; ++j) {
-      int neighbor = graph.col_idx[j];
-      if (neighbor >= 0 && neighbor < total_nodes) {
-        double new_dist = result[static_cast<std::size_t>(current_vertex)] + graph.weights[j];
-        result[static_cast<std::size_t>(neighbor)] = std::min(new_dist, result[static_cast<std::size_t>(neighbor)]);
-      }
-    }
+    RelaxNeighbors(current_vertex, distances, graph, distances, total_nodes);
   }
 
-  return result;
+  return distances;
 }
 
 }  // namespace
