@@ -98,9 +98,10 @@ void KapanovaSImageSmoothingSEQ::SmoothPixel(int x_coord, int y_coord) {
 
   const int temp_pos = (y_coord * stride) + (x_coord * 3);
   const auto pos = static_cast<size_t>(temp_pos);
-  result_[pos] = static_cast<uint8_t>(out_r);
-  result_[pos + 1U] = static_cast<uint8_t>(out_g);
-  result_[pos + 2U] = static_cast<uint8_t>(out_b);
+
+  result_[pos] = static_cast<uint8_t>(std::clamp(static_cast<int>(std::round(out_r)), 0, 255));
+  result_[pos + 1U] = static_cast<uint8_t>(std::clamp(static_cast<int>(std::round(out_g)), 0, 255));
+  result_[pos + 2U] = static_cast<uint8_t>(std::clamp(static_cast<int>(std::round(out_b)), 0, 255));
 }
 
 bool KapanovaSImageSmoothingSEQ::RunImpl() {

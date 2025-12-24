@@ -147,32 +147,6 @@ TEST(KapanovaSImageSmoothingPerformance, MPIScalability) {
   }
 }
 
-TEST(KapanovaSImageSmoothingPerformance, CompareSEQvsMPI) {
-  int rank = 0;
-  int size = 0;
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-  MPI_Comm_size(MPI_COMM_WORLD, &size);
-
-  if (size != 1) {
-    return;
-  }
-
-  const int image_height = 400;
-  const int image_width = 400;
-
-  auto test_image = CreateTestImageData(image_height, image_width);
-  auto formatted_input = FormatInputData(test_image, image_width, image_height);
-
-  kapanova_s_image_smoothing::KapanovaSImageSmoothingSEQ seq_task(formatted_input);
-  EXPECT_TRUE(RunSeqTask(seq_task));
-
-  kapanova_s_image_smoothing::KapanovaSImageSmoothingMPI mpi_task(formatted_input);
-  EXPECT_TRUE(RunMpiTask(mpi_task));
-
-  EXPECT_EQ(seq_task.GetOutput().size(), mpi_task.GetOutput().size());
-  EXPECT_EQ(seq_task.GetOutput(), mpi_task.GetOutput());
-}
-
 TEST(KapanovaSImageSmoothingPerformance, BoundaryCases) {
   int rank = 0;
   int size = 0;

@@ -1,10 +1,12 @@
 #include <gtest/gtest.h>
+#include <mpi.h>
 
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <random>
 #include <string>
 #include <tuple>
 #include <vector>
@@ -66,7 +68,7 @@ class KapanovaSImageSmoothingFuncTests : public ppc::util::BaseRunFuncTests<InTy
     data.push_back(static_cast<uint8_t>(width_ & 0xFF));
     data.push_back(static_cast<uint8_t>((width_ >> 8) & 0xFF));
     data.push_back(static_cast<uint8_t>(height_ & 0xFF));
-    data.push_back(static_cast<uint8_t>((height_ >> 8) & 0xFF));
+    data.push_back(static_cast<uint8_t>((height_ >> 8) & 0xFF));  // Исправлено height_ вместо height
 
     data.insert(data.end(), image_data_.begin(), image_data_.end());
 
@@ -131,7 +133,6 @@ class KapanovaSImageSmoothingFuncTests : public ppc::util::BaseRunFuncTests<InTy
 
     for (int y_coord = 0; y_coord < height_; ++y_coord) {
       for (int x_coord = 0; x_coord < width_ - 1; ++x_coord) {
-        // Исправлено: явное приведение каждого int к size_t перед умножением
         const auto idx1 =
             (static_cast<size_t>(y_coord) * static_cast<size_t>(width_) * 3) + (static_cast<size_t>(x_coord) * 3);
         const auto idx2 =
@@ -193,6 +194,127 @@ const auto kGtestValues = ppc::util::ExpandToValues(kTestTasksList);
 const auto kPerfTestName = KapanovaSImageSmoothingFuncTests::PrintFuncTestName<KapanovaSImageSmoothingFuncTests>;
 
 INSTANTIATE_TEST_SUITE_P(ImageSmoothingTests, KapanovaSImageSmoothingFuncTests, kGtestValues, kPerfTestName);
+
+TEST(KapanovaSImageSmoothingFuncTests, CompareSEQandMPI) {
+  int rank = 0;
+  int size = 0;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &size);
+
+  const std::vector<std::pair<int, int>> test_sizes = {
+      {10, 10},    // Маленькое
+      {100, 100},  // Среднее
+      {400, 400}   // Большое
+  };
+
+  std::random_device rd;
+  std::mt19937 gen(rd());
+  std::uniform_int_distribution<> dis(0, 255);
+
+  for (const auto &[width, height] : test_sizes) {
+    std::vector<uint8_t> image_data;
+    if (rank == 0) {
+      image_data.resize(static_cast<size_t>(width) * static_cast<size_t>(height) * 3);
+      for (size_t i = 0; i < image_data.size(); ++i) {
+        image_data[i] = static_cast<uint8_t>(dis(gen));
+      }
+    }
+
+    kapanova_s_image_smoothing::InType formatted_input;
+    if (rank == 0) {
+      std::vector<uint8_t> data;
+
+      data.push_back(static_cast<uint8_t>(width & 0xFF));
+      data.push_back(static_cast<uint8_t>((width >> 8) & 0xFF));
+      data.push_back(static_cast<uint8_t>(height & 0xFF));
+      data.push_back(static_cast<uint8_t>((height >> 8) & 0xFF));
+
+      data.insert(data.end(), image_data.begin(), image_data.end());
+      formatted_input.push_back(data);
+    }
+
+    kapanova_s_image_smoothing::KapanovaSImageSmoothingMPI mpi_task(formatted_input);
+    bool mpi_success = mpi_task.Validation() && mpi_task.PreProcessing() && mpi_task.Run() && mpi_task.PostProcessing();
+
+    std::vector<uint8_t> mpi_result;
+    if (rank == 0) {
+      mpi_result = mpi_task.GetOutput();
+    }
+
+    if (rank == 0) {
+      EXPECT_TRUE(mpi_success);
+      EXPECT_FALSE(mpi_result.empty());
+      EXPECT_EQ(mpi_result.size(), static_cast<size_t>(width) * static_cast<size_t>(height) * 3);
+
+      kapanova_s_image_smoothing::KapanovaSImageSmoothingSEQ seq_task(formatted_input);
+      bool seq_success =
+          seq_task.Validation() && seq_task.PreProcessing() && seq_task.Run() && seq_task.PostProcessing();
+
+      EXPECT_TRUE(seq_success);
+
+      auto seq_result = seq_task.GetOutput();
+      EXPECT_FALSE(seq_result.empty());
+      EXPECT_EQ(seq_result.size(), mpi_result.size());
+
+      EXPECT_EQ(seq_result, mpi_result) << "SEQ and MPI results differ for image size " << width << "x" << height;
+    }
+
+    MPI_Barrier(MPI_COMM_WORLD);
+  }
+}
+
+TEST(KapanovaSImageSmoothingFuncTests, EdgeCases) {
+  int rank = 0;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+  const std::vector<std::pair<int, int>> edge_sizes = {
+      {1, 100},  // Очень узкое
+      {100, 1},  // Очень широкое
+      {2, 2},    // Минимальное
+      {3, 3}     // Для фильтра 3x3
+  };
+
+  std::random_device rd;
+  std::mt19937 gen(rd());
+  std::uniform_int_distribution<> dis(0, 255);
+
+  for (const auto &[width, height] : edge_sizes) {
+    std::vector<uint8_t> image_data;
+    if (rank == 0) {
+      image_data.resize(static_cast<size_t>(width) * static_cast<size_t>(height) * 3);
+      for (size_t i = 0; i < image_data.size(); ++i) {
+        image_data[i] = static_cast<uint8_t>(dis(gen));
+      }
+    }
+
+    kapanova_s_image_smoothing::InType formatted_input;
+    if (rank == 0) {
+      std::vector<uint8_t> data;
+
+      data.push_back(static_cast<uint8_t>(width & 0xFF));
+      data.push_back(static_cast<uint8_t>((width >> 8) & 0xFF));
+      data.push_back(static_cast<uint8_t>(height & 0xFF));
+      data.push_back(static_cast<uint8_t>((height >> 8) & 0xFF));
+
+      data.insert(data.end(), image_data.begin(), image_data.end());
+      formatted_input.push_back(data);
+    }
+
+    kapanova_s_image_smoothing::KapanovaSImageSmoothingMPI mpi_task(formatted_input);
+    bool mpi_success = mpi_task.Validation() && mpi_task.PreProcessing() && mpi_task.Run() && mpi_task.PostProcessing();
+
+    if (rank == 0) {
+      EXPECT_TRUE(mpi_success);
+
+      auto mpi_result = mpi_task.GetOutput();
+      EXPECT_FALSE(mpi_result.empty());
+      EXPECT_EQ(mpi_result.size(), static_cast<size_t>(width) * static_cast<size_t>(height) * 3)
+          << "Wrong output size for image " << width << "x" << height;
+    }
+
+    MPI_Barrier(MPI_COMM_WORLD);
+  }
+}
 
 }  // namespace
 
