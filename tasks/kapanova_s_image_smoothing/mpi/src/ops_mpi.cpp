@@ -25,7 +25,6 @@ constexpr int kEscapeSignal = 0;
 constexpr int kNoEscapeSignal = 1;
 }  // namespace
 
-// Исправление 1: убраны лишние инициализаторы width_(0), height_(0)
 KapanovaSImageSmoothingMPI::KapanovaSImageSmoothingMPI(const InType &in) : radius_(kRadius) {
   SetTypeOfTask(GetStaticTypeOfTask());
   GetInput() = in.empty() ? InType() : in;
@@ -62,8 +61,7 @@ bool KapanovaSImageSmoothingMPI::PreProcessingImpl() {
   return true;
 }
 
-// Исправление 2: метод можно сделать static
-static std::vector<float> KapanovaSImageSmoothingMPI::CreateKernel() {
+std::vector<float> KapanovaSImageSmoothingMPI::CreateKernel() {
   const auto kernel_size = static_cast<size_t>(kKernelSize) * static_cast<size_t>(kKernelSize);
   std::vector<float> kernel(kernel_size, 0.0F);
   float norm = 0.0F;
@@ -90,7 +88,6 @@ void KapanovaSImageSmoothingMPI::ProcessBorderRows() {
     const auto top_pos = static_cast<size_t>(x_coord) * 3U;
     SmoothPixel(&result_[top_pos], x_coord, 0);
 
-    // Исправление 3: добавлены скобки для явного указания приоритета операций
     const auto bottom_pos = static_cast<size_t>((height_ - 1) * width_ * 3) + (static_cast<size_t>(x_coord) * 3U);
     SmoothPixel(&result_[bottom_pos], x_coord, height_ - 1);
   }
@@ -101,7 +98,6 @@ void KapanovaSImageSmoothingMPI::ProcessRowRange(int start_row, int num_rows) {
 
   for (int y_coord = start_row; y_coord < end_row; ++y_coord) {
     for (int x_coord = 0; x_coord < width_; ++x_coord) {
-      // Исправление 4: добавлены скобки для явного указания приоритета операций
       const auto pos = static_cast<size_t>(y_coord * width_ * 3) + (static_cast<size_t>(x_coord) * 3U);
       SmoothPixel(&result_[pos], x_coord, y_coord);
     }
@@ -180,7 +176,6 @@ void KapanovaSImageSmoothingMPI::ReceiveResultsFromWorkers(int start_row, int nu
     const int result_row = start_row + i + 1;
 
     if (result_row > 0 && result_row < height_ - 1) {
-      // Исправление 5: правильное приведение типа
       const auto result_pos = static_cast<size_t>(result_row) * static_cast<size_t>(width_) * 3;
       MPI_Recv(&result_[result_pos], width_ * 3, MPI_UNSIGNED_CHAR, worker_rank, kTagResult, MPI_COMM_WORLD,
                MPI_STATUS_IGNORE);
@@ -188,8 +183,7 @@ void KapanovaSImageSmoothingMPI::ReceiveResultsFromWorkers(int start_row, int nu
   }
 }
 
-// Исправление 6: метод можно сделать static
-static void KapanovaSImageSmoothingMPI::SendExitSignalToWorkers(int num_workers) {
+void KapanovaSImageSmoothingMPI::SendExitSignalToWorkers(int num_workers) {
   for (int i = 1; i <= num_workers; ++i) {
     MPI_Send(&kEscapeSignal, 1, MPI_INT, i, kTagExit, MPI_COMM_WORLD);
   }
@@ -223,8 +217,7 @@ void KapanovaSImageSmoothingMPI::ProcessWorkerTasks(int local_width) {
   }
 }
 
-// Исправление 7: метод можно сделать static
-static int KapanovaSImageSmoothingMPI::ReceiveImageData(std::vector<uint8_t> &buffer) {
+int KapanovaSImageSmoothingMPI::ReceiveImageData(std::vector<uint8_t> &buffer) {
   MPI_Status status;
   MPI_Probe(0, kTagData, MPI_COMM_WORLD, &status);
 
@@ -250,15 +243,13 @@ void KapanovaSImageSmoothingMPI::ProcessAndSendResult(int local_width, const std
   MPI_Send(result.data(), local_width * 3, MPI_UNSIGNED_CHAR, 0, kTagResult, MPI_COMM_WORLD);
 }
 
-// Исправление 8: метод можно сделать static
-static int KapanovaSImageSmoothingMPI::GetCommRank() {
+int KapanovaSImageSmoothingMPI::GetCommRank() {
   int rank = 0;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   return rank;
 }
 
-// Исправление 9: метод можно сделать static
-static int KapanovaSImageSmoothingMPI::GetCommSize() {
+int KapanovaSImageSmoothingMPI::GetCommSize() {
   int size = 0;
   MPI_Comm_size(MPI_COMM_WORLD, &size);
   return size;
@@ -307,7 +298,6 @@ void KapanovaSImageSmoothingMPI::SmoothPixel(uint8_t *out, int x_coord, int y_co
       for (int rx = -radius_; rx <= radius_; ++rx) {
         int local_x = clamp(x_coord + rx, 0, local_width - 1);
 
-        // Исправление 10: добавлены скобки для явного указания приоритета операций
         const auto pixel_pos = static_cast<size_t>(local_y * local_stride) + (static_cast<size_t>(local_x) * 3U);
         const auto kernel_pos = static_cast<size_t>((ry + radius_) * k_size) + static_cast<size_t>(rx + radius_);
 
@@ -325,7 +315,6 @@ void KapanovaSImageSmoothingMPI::SmoothPixel(uint8_t *out, int x_coord, int y_co
       for (int rx = -radius_; rx <= radius_; ++rx) {
         const int x = clamp(x_coord + rx, 0, width_ - 1);
 
-        // Исправление 11: добавлены скобки для явного указания приоритета операций
         const auto pixel_pos = static_cast<size_t>(y * stride) + (static_cast<size_t>(x) * 3U);
         const auto kernel_pos = static_cast<size_t>((ry + radius_) * k_size) + static_cast<size_t>(rx + radius_);
 
