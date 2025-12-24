@@ -131,8 +131,11 @@ class KapanovaSImageSmoothingFuncTests : public ppc::util::BaseRunFuncTests<InTy
 
     for (int y_coord = 0; y_coord < height_; ++y_coord) {
       for (int x_coord = 0; x_coord < width_ - 1; ++x_coord) {
-        const auto idx1 = static_cast<size_t>((y_coord * width_ + x_coord) * 3);
-        const auto idx2 = static_cast<size_t>((y_coord * width_ + (x_coord + 1)) * 3);
+        // Исправлено: явное приведение каждого int к size_t перед умножением
+        const auto idx1 =
+            static_cast<size_t>(y_coord) * static_cast<size_t>(width_) * 3 + static_cast<size_t>(x_coord) * 3;
+        const auto idx2 =
+            static_cast<size_t>(y_coord) * static_cast<size_t>(width_) * 3 + static_cast<size_t>(x_coord + 1) * 3;
 
         const double brightness1_input = (0.299 * input[idx1]) + (0.587 * input[idx1 + 1]) + (0.114 * input[idx1 + 2]);
         const double brightness2_input = (0.299 * input[idx2]) + (0.587 * input[idx2 + 1]) + (0.114 * input[idx2 + 2]);
