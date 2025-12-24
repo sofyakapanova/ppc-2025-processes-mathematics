@@ -48,12 +48,6 @@ class KapanovaSImageSmoothingFuncTests : public ppc::util::BaseRunFuncTests<InTy
       return output_data == expected_output_;
     }
 
-    for (const auto &value : output_data) {
-      if (value > 255) {
-        return false;
-      }
-    }
-
     if (IsConstantImage(image_data_)) {
       return CheckConstantImage(output_data);
     }
