@@ -1,9 +1,7 @@
 #include <gtest/gtest.h>
-#include <mpi.h>
 
 #include <chrono>
 #include <cstddef>
-#include <iostream>
 #include <random>
 #include <string>
 #include <vector>
