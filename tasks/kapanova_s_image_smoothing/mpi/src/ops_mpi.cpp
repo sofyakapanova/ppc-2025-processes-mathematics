@@ -86,35 +86,6 @@ std::vector<float> KapanovaSImageSmoothingMPI::CreateKernel() const {
   return kernel;
 }
 
-void KapanovaSImageSmoothingMPI::SmoothPixel(uint8_t *out, int x_coord, int y_coord) {
-  const int stride = width_ * 3;
-  float out_r = 0.0F;
-  float out_g = 0.0F;
-  float out_b = 0.0F;
-
-  const auto clamp_coord = [this](int coord, bool is_x) {
-    const int limit = is_x ? width_ : height_;
-    return std::clamp(coord, 0, limit - 1);
-  };
-
-  for (int ry = -kRadius; ry <= kRadius; ++ry) {
-    const int y = clamp_coord(y_coord + ry, false);
-    for (int rx = -kRadius; rx <= kRadius; ++rx) {
-      const int x = clamp_coord(x_coord + rx, true);
-      const size_t pixel_pos = static_cast<size_t>((y * stride) + (x * 3));
-      const size_t kernel_pos = static_cast<size_t>(((ry + kRadius) * kKernelSize) + (rx + kRadius));
-
-      out_r += static_cast<float>(input_[pixel_pos]) * kernel_[kernel_pos];
-      out_g += static_cast<float>(input_[pixel_pos + 1U]) * kernel_[kernel_pos];
-      out_b += static_cast<float>(input_[pixel_pos + 2U]) * kernel_[kernel_pos];
-    }
-  }
-
-  out[0] = static_cast<uint8_t>(out_r);
-  out[1] = static_cast<uint8_t>(out_g);
-  out[2] = static_cast<uint8_t>(out_b);
-}
-
 void KapanovaSImageSmoothingMPI::ProcessBorderRows() {
   for (int x_coord = 0; x_coord < width_; ++x_coord) {
     const size_t top_pos = static_cast<size_t>(x_coord * 3);
@@ -269,9 +240,7 @@ void KapanovaSImageSmoothingMPI::ProcessAndSendResult(int local_width, const std
   for (int x_coord = 0; x_coord < local_width; ++x_coord) {
     const size_t pos = static_cast<size_t>(x_coord * 3);
 
-    // Сохраняем оригинальные данные для обработки
-    std::vector<uint8_t> temp_input = input;
-    SmoothPixel(&result[pos], x_coord, target_row);
+    SmoothPixel(&result[pos], x_coord, target_row, true, &input, local_width, rows_received);
   }
 
   MPI_Send(result.data(), local_width * 3, MPI_UNSIGNED_CHAR, 0, kTagResult, MPI_COMM_WORLD);
@@ -313,4 +282,54 @@ bool KapanovaSImageSmoothingMPI::PostProcessingImpl() {
   return true;
 }
 
+void KapanovaSImageSmoothingMPI::SmoothPixel(uint8_t *out, int x_coord, int y_coord, bool use_local,
+                                             const std::vector<uint8_t> *local_input, int local_width,
+                                             int local_height) {
+  const int kSize = (2 * radius_) + 1;
+  float out_r = 0.0F;
+  float out_g = 0.0F;
+  float out_b = 0.0F;
+
+  auto clamp = [](int n, int lo, int hi) { return std::min(std::max(n, lo), hi); };
+
+  if (use_local && local_input) {
+    const int local_stride = local_width * 3;
+
+    for (int ry = -radius_; ry <= radius_; ++ry) {
+      int local_y = clamp(y_coord + ry, 0, local_height - 1);
+
+      for (int rx = -radius_; rx <= radius_; ++rx) {
+        int local_x = clamp(x_coord + rx, 0, local_width - 1);
+
+        const size_t pixel_pos = static_cast<size_t>((local_y * local_stride) + (local_x * 3));
+        const size_t kernel_pos = static_cast<size_t>(((ry + radius_) * kSize) + (rx + radius_));
+
+        out_r += static_cast<float>((*local_input)[pixel_pos]) * kernel_[kernel_pos];
+        out_g += static_cast<float>((*local_input)[pixel_pos + 1U]) * kernel_[kernel_pos];
+        out_b += static_cast<float>((*local_input)[pixel_pos + 2U]) * kernel_[kernel_pos];
+      }
+    }
+  } else {
+    const int stride = width_ * 3;
+
+    for (int ry = -radius_; ry <= radius_; ++ry) {
+      const int y = clamp(y_coord + ry, 0, height_ - 1);
+
+      for (int rx = -radius_; rx <= radius_; ++rx) {
+        const int x = clamp(x_coord + rx, 0, width_ - 1);
+
+        const size_t pixel_pos = static_cast<size_t>((y * stride) + (x * 3));
+        const size_t kernel_pos = static_cast<size_t>(((ry + radius_) * kSize) + (rx + radius_));
+
+        out_r += static_cast<float>(input_[pixel_pos]) * kernel_[kernel_pos];
+        out_g += static_cast<float>(input_[pixel_pos + 1U]) * kernel_[kernel_pos];
+        out_b += static_cast<float>(input_[pixel_pos + 2U]) * kernel_[kernel_pos];
+      }
+    }
+  }
+
+  out[0] = static_cast<uint8_t>(out_r);
+  out[1] = static_cast<uint8_t>(out_g);
+  out[2] = static_cast<uint8_t>(out_b);
+}
 }  // namespace kapanova_s_image_smoothing

@@ -21,10 +21,11 @@ class KapanovaSImageSmoothingMPI : public BaseTask {
   bool RunImpl() override;
   bool PostProcessingImpl() override;
 
-  void SmoothPixel(uint8_t *out, int x_coord, int y_coord);
+  void SmoothPixel(uint8_t *out, int x_coord, int y_coord, bool use_local = false,
+                   const std::vector<uint8_t> *local_input = nullptr, int local_width = 0, int local_height = 0);
+
   [[nodiscard]] std::vector<float> CreateKernel() const;
 
-  // Вспомогательные методы для RunImpl
   void ProcessBorderRows();
   void ProcessRowRange(int start_row, int num_rows);
   void SendImageData(int worker_rank, int row);

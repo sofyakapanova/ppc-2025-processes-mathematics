@@ -1,5 +1,5 @@
-#include <MPI.h>
 #include <gtest/gtest.h>
+#include <mpi.h>
 
 #include <chrono>
 #include <cstddef>
