@@ -61,7 +61,7 @@ bool KapanovaSImageSmoothingMPI::PreProcessingImpl() {
   return true;
 }
 
-std::vector<float> KapanovaSImageSmoothingMPI::CreateKernel() {
+std::vector<float> KapanovaSImageSmoothingMPI::CreateKernel() const {
   const auto kernel_size = static_cast<size_t>(kKernelSize) * static_cast<size_t>(kKernelSize);
   std::vector<float> kernel(kernel_size, 0.0F);
   float norm = 0.0F;
@@ -183,7 +183,7 @@ void KapanovaSImageSmoothingMPI::ReceiveResultsFromWorkers(int start_row, int nu
   }
 }
 
-void KapanovaSImageSmoothingMPI::SendExitSignalToWorkers(int num_workers) {
+void KapanovaSImageSmoothingMPI::SendExitSignalToWorkers(int num_workers) const {
   for (int i = 1; i <= num_workers; ++i) {
     MPI_Send(&kEscapeSignal, 1, MPI_INT, i, kTagExit, MPI_COMM_WORLD);
   }
@@ -243,13 +243,13 @@ void KapanovaSImageSmoothingMPI::ProcessAndSendResult(int local_width, const std
   MPI_Send(result.data(), local_width * 3, MPI_UNSIGNED_CHAR, 0, kTagResult, MPI_COMM_WORLD);
 }
 
-int KapanovaSImageSmoothingMPI::GetCommRank() {
+int KapanovaSImageSmoothingMPI::GetCommRank() const {
   int rank = 0;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   return rank;
 }
 
-int KapanovaSImageSmoothingMPI::GetCommSize() {
+int KapanovaSImageSmoothingMPI::GetCommSize() const {
   int size = 0;
   MPI_Comm_size(MPI_COMM_WORLD, &size);
   return size;
