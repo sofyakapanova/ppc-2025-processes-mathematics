@@ -1,203 +1,100 @@
-#include <MPI.h>
 #include <gtest/gtest.h>
 
-#include <chrono>
+#include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
-#include <random>
 #include <string>
-#include <utility>
+#include <tuple>
 #include <vector>
 
 #include "kapanova_s_image_smoothing/common/include/common.hpp"
 #include "kapanova_s_image_smoothing/mpi/include/ops_mpi.hpp"
 #include "kapanova_s_image_smoothing/seq/include/ops_seq.hpp"
+#include "util/include/func_test_util.hpp"
+#include "util/include/util.hpp"
+
+namespace kapanova_s_image_smoothing {
+
+class KapanovaSImageSmoothingFuncTests : public ppc::util::BaseRunFuncTests<InType, OutType, TestType> {
+ public:
+  static std::string PrintTestParam(const TestType &test_param) {
+    const int width = std::get<1>(test_param);
+    const int height = std::get<2>(test_param);
+
+    std::string name = "image_" + std::to_string(width) + "x" + std::to_string(height);
+
+    std::ranges::replace(name, '-', 'n');
+    return name;
+  }
+
+ protected:
+  void SetUp() override {
+    test_params_ = std::get<static_cast<std::size_t>(ppc::util::GTestParamIndex::kTestParams)>(GetParam());
+    image_data_ = std::get<0>(test_params_);
+    width_ = std::get<1>(test_params_);
+    height_ = std::get<2>(test_params_);
+    expected_output_ = std::get<3>(test_params_);
+  }
+
+  bool CheckTestOutputData(OutType &output_data) final {
+    if (expected_output_.empty()) {
+      const size_t expected_size = static_cast<size_t>(width_) * static_cast<size_t>(height_) * 3;
+      return !output_data.empty() && output_data.size() == expected_size;
+    }
+    return output_data == expected_output_;
+  }
+
+  InType GetTestInputData() final {
+    InType formatted_input;
+    std::vector<uint8_t> data;
+
+    data.push_back(static_cast<uint8_t>(width_ & 0xFF));
+    data.push_back(static_cast<uint8_t>((width_ >> 8) & 0xFF));
+    data.push_back(static_cast<uint8_t>(height_ & 0xFF));
+    data.push_back(static_cast<uint8_t>((height_ >> 8) & 0xFF));
+
+    data.insert(data.end(), image_data_.begin(), image_data_.end());
+
+    formatted_input.push_back(data);
+    return formatted_input;
+  }
+
+ private:
+  TestType test_params_;
+  std::vector<uint8_t> image_data_;
+  int width_ = 0;
+  int height_ = 0;
+  std::vector<uint8_t> expected_output_;
+};
 
 namespace {
 
-std::vector<uint8_t> CreateTestImageData(int height, int width);
-kapanova_s_image_smoothing::InType FormatInputData(const std::vector<uint8_t> &image_data, int width, int height);
-bool RunMpiTask(kapanova_s_image_smoothing::KapanovaSImageSmoothingMPI &mpi_task);
-bool RunSeqTask(kapanova_s_image_smoothing::KapanovaSImageSmoothingSEQ &seq_task);
+const std::vector<uint8_t> kImage3x3 = {255, 0,   0, 0,   255, 0,   0,   0,  255, 255, 255, 0,   0,  255,
+                                        255, 255, 0, 255, 128, 128, 128, 64, 64,  64,  192, 192, 192};
+const int kWidth3x3 = 3;
+const int kHeight3x3 = 3;
 
-std::vector<uint8_t> CreateTestImageData(int height, int width) {
-  std::vector<uint8_t> image_data(static_cast<size_t>(height) * static_cast<size_t>(width) * 3);
-  std::random_device rd;
-  std::mt19937 gen(rd());
-  std::uniform_int_distribution<> dis(0, 255);
+const std::vector<uint8_t> kImage2x2 = {255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 255};
+const int kWidth2x2 = 2;
+const int kHeight2x2 = 2;
 
-  for (size_t i = 0; i < image_data.size(); ++i) {
-    image_data[i] = static_cast<uint8_t>(dis(gen));
-  }
-  return image_data;
+TEST_P(KapanovaSImageSmoothingFuncTests, SmoothImage) {
+  ExecuteTest(GetParam());
 }
 
-kapanova_s_image_smoothing::InType FormatInputData(const std::vector<uint8_t> &image_data, int width, int height) {
-  kapanova_s_image_smoothing::InType formatted_input;
-  std::vector<uint8_t> data;
+const std::array<TestType, 2> kTestParam = {std::make_tuple(kImage3x3, kWidth3x3, kHeight3x3, std::vector<uint8_t>()),
+                                            std::make_tuple(kImage2x2, kWidth2x2, kHeight2x2, std::vector<uint8_t>())};
 
-  data.push_back(static_cast<uint8_t>(width & 0xFF));
-  data.push_back(static_cast<uint8_t>((width >> 8) & 0xFF));
-  data.push_back(static_cast<uint8_t>(height & 0xFF));
-  data.push_back(static_cast<uint8_t>((height >> 8) & 0xFF));
+const auto kTestTasksList = std::tuple_cat(
+    ppc::util::AddFuncTask<KapanovaSImageSmoothingMPI, InType>(kTestParam, PPC_SETTINGS_kapanova_s_image_smoothing),
+    ppc::util::AddFuncTask<KapanovaSImageSmoothingSEQ, InType>(kTestParam, PPC_SETTINGS_kapanova_s_image_smoothing));
 
-  data.insert(data.end(), image_data.begin(), image_data.end());
+const auto kGtestValues = ppc::util::ExpandToValues(kTestTasksList);
+const auto kPerfTestName = KapanovaSImageSmoothingFuncTests::PrintFuncTestName<KapanovaSImageSmoothingFuncTests>;
 
-  formatted_input.push_back(data);
-  return formatted_input;
-}
-
-bool RunMpiTask(kapanova_s_image_smoothing::KapanovaSImageSmoothingMPI &mpi_task) {
-  return mpi_task.Validation() && mpi_task.PreProcessing() && mpi_task.Run() && mpi_task.PostProcessing();
-}
-
-bool RunSeqTask(kapanova_s_image_smoothing::KapanovaSImageSmoothingSEQ &seq_task) {
-  return seq_task.Validation() && seq_task.PreProcessing() && seq_task.Run() && seq_task.PostProcessing();
-}
-
-TEST(KapanovaSImageSmoothingPerformance, SequentialBaseline) {
-  const int image_height = 2500;
-  const int image_width = 2500;
-
-  auto test_image = CreateTestImageData(image_height, image_width);
-  auto formatted_input = FormatInputData(test_image, image_width, image_height);
-
-  kapanova_s_image_smoothing::KapanovaSImageSmoothingSEQ sequential_task(formatted_input);
-
-  EXPECT_TRUE(RunSeqTask(sequential_task));
-
-  EXPECT_FALSE(sequential_task.GetOutput().empty());
-}
-
-TEST(KapanovaSImageSmoothingPerformance, MPISingleProcess) {
-  int rank = 0;
-  int size = 0;
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-  MPI_Comm_size(MPI_COMM_WORLD, &size);
-
-  if (size != 1) {
-    return;
-  }
-
-  const int image_height = 2500;
-  const int image_width = 2500;
-
-  auto test_image = CreateTestImageData(image_height, image_width);
-  auto formatted_input = FormatInputData(test_image, image_width, image_height);
-
-  kapanova_s_image_smoothing::KapanovaSImageSmoothingMPI mpi_task(formatted_input);
-
-  EXPECT_TRUE(RunMpiTask(mpi_task));
-
-  EXPECT_FALSE(mpi_task.GetOutput().empty());
-}
-
-TEST(KapanovaSImageSmoothingPerformance, MPIMultiProcess) {
-  int rank = 0;
-  int size = 0;
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-  MPI_Comm_size(MPI_COMM_WORLD, &size);
-
-  if (size == 1) {
-    return;
-  }
-
-  const int image_height = 2500;
-  const int image_width = 2500;
-
-  auto test_image = CreateTestImageData(image_height, image_width);
-  auto formatted_input = FormatInputData(test_image, image_width, image_height);
-
-  kapanova_s_image_smoothing::KapanovaSImageSmoothingMPI mpi_task(formatted_input);
-
-  MPI_Barrier(MPI_COMM_WORLD);
-
-  EXPECT_TRUE(RunMpiTask(mpi_task));
-
-  MPI_Barrier(MPI_COMM_WORLD);
-
-  EXPECT_FALSE(mpi_task.GetOutput().empty());
-}
-
-TEST(KapanovaSImageSmoothingPerformance, MPIScalability) {
-  int rank = 0;
-  int size = 0;
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-  MPI_Comm_size(MPI_COMM_WORLD, &size);
-
-  std::vector<std::pair<std::string, std::pair<int, int>>> test_cases = {
-      {"Small (100x100)", {100, 100}},
-      {"Medium (1000x1000)", {1000, 1000}},
-      {"Large (2500x2500)", {2500, 2500}},
-  };
-
-  for (const auto &[name, dimensions] : test_cases) {
-    auto [height, width] = dimensions;
-    auto test_image = CreateTestImageData(height, width);
-    auto formatted_input = FormatInputData(test_image, width, height);
-
-    kapanova_s_image_smoothing::KapanovaSImageSmoothingMPI mpi_task(formatted_input);
-
-    MPI_Barrier(MPI_COMM_WORLD);
-
-    EXPECT_TRUE(RunMpiTask(mpi_task));
-
-    MPI_Barrier(MPI_COMM_WORLD);
-
-    EXPECT_FALSE(mpi_task.GetOutput().empty());
-  }
-}
-
-TEST(KapanovaSImageSmoothingPerformance, CompareSEQvsMPI) {
-  int rank = 0;
-  int size = 0;
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-  MPI_Comm_size(MPI_COMM_WORLD, &size);
-
-  if (size != 1) {
-    return;
-  }
-
-  const int image_height = 400;
-  const int image_width = 400;
-
-  auto test_image = CreateTestImageData(image_height, image_width);
-  auto formatted_input = FormatInputData(test_image, image_width, image_height);
-
-  kapanova_s_image_smoothing::KapanovaSImageSmoothingSEQ seq_task(formatted_input);
-  EXPECT_TRUE(RunSeqTask(seq_task));
-
-  kapanova_s_image_smoothing::KapanovaSImageSmoothingMPI mpi_task(formatted_input);
-  EXPECT_TRUE(RunMpiTask(mpi_task));
-
-  EXPECT_EQ(seq_task.GetOutput().size(), mpi_task.GetOutput().size());
-  EXPECT_EQ(seq_task.GetOutput(), mpi_task.GetOutput());
-}
-
-TEST(KapanovaSImageSmoothingPerformance, BoundaryCases) {
-  int rank = 0;
-  int size = 0;
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-  MPI_Comm_size(MPI_COMM_WORLD, &size);
-
-  bool all_tests_passed = true;
-
-  auto test_image1 = CreateTestImageData(2, 2);
-  auto formatted_input1 = FormatInputData(test_image1, 2, 2);
-  kapanova_s_image_smoothing::KapanovaSImageSmoothingMPI mpi_task1(formatted_input1);
-  all_tests_passed = all_tests_passed && RunMpiTask(mpi_task1);
-
-  auto test_image2 = CreateTestImageData(100, 10);
-  auto formatted_input2 = FormatInputData(test_image2, 10, 100);
-  kapanova_s_image_smoothing::KapanovaSImageSmoothingMPI mpi_task2(formatted_input2);
-  all_tests_passed = all_tests_passed && RunMpiTask(mpi_task2);
-
-  auto test_image3 = CreateTestImageData(10, 100);
-  auto formatted_input3 = FormatInputData(test_image3, 100, 10);
-  kapanova_s_image_smoothing::KapanovaSImageSmoothingMPI mpi_task3(formatted_input3);
-  all_tests_passed = all_tests_passed && RunMpiTask(mpi_task3);
-
-  EXPECT_TRUE(all_tests_passed);
-}
+INSTANTIATE_TEST_SUITE_P(ImageSmoothingTests, KapanovaSImageSmoothingFuncTests, kGtestValues, kPerfTestName);
 
 }  // namespace
+
+}  // namespace kapanova_s_image_smoothing
