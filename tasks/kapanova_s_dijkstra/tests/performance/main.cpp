@@ -118,7 +118,7 @@ class KapanovaSDijkstraPerfTests : public ::testing::Test {
     for (const auto &dist : result) {
       EXPECT_GE(dist, -1e-6);
     }
-    
+
     // Use the variables to avoid warnings
     (void)start;
     (void)end;
@@ -148,7 +148,7 @@ class KapanovaSDijkstraPerfTests : public ::testing::Test {
     for (const auto &dist : result) {
       EXPECT_GE(dist, -1e-6);
     }
-    
+
     // Use the variables to avoid warnings
     (void)start;
     (void)end;
