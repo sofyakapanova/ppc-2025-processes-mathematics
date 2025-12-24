@@ -24,6 +24,29 @@ class KapanovaSImageSmoothingMPI : public BaseTask {
   void SmoothPixel(uint8_t *out, int x_coord, int y_coord);
   [[nodiscard]] std::vector<float> CreateKernel() const;
 
+  // Вспомогательные методы для RunImpl
+  void ProcessBorderRows();
+  void ProcessRowRange(int start_row, int num_rows);
+  void SendImageData(int worker_rank, int row);
+  [[nodiscard]] int CalculateDataSize(int row) const;
+  [[nodiscard]] int CalculateStartPosition(int row) const;
+
+  void MasterProcess();
+  void SendWidthToWorkers(int num_workers) const;
+  void DistributeRowsToWorkers(int num_workers);
+  void AssignRowsToWorkers(int start_row, int num_workers);
+  void ReceiveResultsFromWorkers(int start_row, int num_workers);
+  void SendExitSignalToWorkers(int num_workers) const;
+
+  void WorkerProcess();
+  void ProcessWorkerTasks(int local_width);
+  int ReceiveImageData(std::vector<uint8_t> &buffer);
+  void ProcessAndSendResult(int local_width, const std::vector<uint8_t> &input, std::vector<uint8_t> &result,
+                            int rows_received);
+
+  [[nodiscard]] int GetCommRank() const;
+  [[nodiscard]] int GetCommSize() const;
+
   int width_ = 0;
   int height_ = 0;
   std::vector<uint8_t> input_;

@@ -64,9 +64,7 @@ TEST(KapanovaSImageSmoothingPerformance, SequentialBaseline) {
 
   kapanova_s_image_smoothing::KapanovaSImageSmoothingSEQ sequential_task(formatted_input);
 
-  auto start_time = std::chrono::high_resolution_clock::now();
   EXPECT_TRUE(RunSeqTask(sequential_task));
-  auto end_time = std::chrono::high_resolution_clock::now();
 
   EXPECT_FALSE(sequential_task.GetOutput().empty());
 }
@@ -89,9 +87,7 @@ TEST(KapanovaSImageSmoothingPerformance, MPISingleProcess) {
 
   kapanova_s_image_smoothing::KapanovaSImageSmoothingMPI mpi_task(formatted_input);
 
-  auto start_time = std::chrono::high_resolution_clock::now();
   EXPECT_TRUE(RunMpiTask(mpi_task));
-  auto end_time = std::chrono::high_resolution_clock::now();
 
   EXPECT_FALSE(mpi_task.GetOutput().empty());
 }
@@ -115,12 +111,10 @@ TEST(KapanovaSImageSmoothingPerformance, MPIMultiProcess) {
   kapanova_s_image_smoothing::KapanovaSImageSmoothingMPI mpi_task(formatted_input);
 
   MPI_Barrier(MPI_COMM_WORLD);
-  auto start_time = std::chrono::high_resolution_clock::now();
 
   EXPECT_TRUE(RunMpiTask(mpi_task));
 
   MPI_Barrier(MPI_COMM_WORLD);
-  auto end_time = std::chrono::high_resolution_clock::now();
 
   EXPECT_FALSE(mpi_task.GetOutput().empty());
 }
@@ -145,12 +139,10 @@ TEST(KapanovaSImageSmoothingPerformance, MPIScalability) {
     kapanova_s_image_smoothing::KapanovaSImageSmoothingMPI mpi_task(formatted_input);
 
     MPI_Barrier(MPI_COMM_WORLD);
-    auto start_time = std::chrono::high_resolution_clock::now();
 
     EXPECT_TRUE(RunMpiTask(mpi_task));
 
     MPI_Barrier(MPI_COMM_WORLD);
-    auto end_time = std::chrono::high_resolution_clock::now();
 
     EXPECT_FALSE(mpi_task.GetOutput().empty());
   }
