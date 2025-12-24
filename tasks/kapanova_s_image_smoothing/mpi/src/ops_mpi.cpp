@@ -97,7 +97,7 @@ void KapanovaSImageSmoothingMPI::ProcessBorderRows() {
 }
 
 void KapanovaSImageSmoothingMPI::ProcessRowRange(int start_row, int num_rows) {
-  const int end_row = std::min(start_row + num_rows, height_ - 2);
+  const int end_row = std::min(start_row + num_rows, height_ - 1);
 
   for (int y_coord = start_row; y_coord < end_row; ++y_coord) {
     for (int x_coord = 0; x_coord < width_; ++x_coord) {
@@ -263,7 +263,7 @@ bool KapanovaSImageSmoothingMPI::RunImpl() {
   const int size = GetCommSize();
 
   if (size == 1) {
-    ProcessRowRange(0, height_ - 2);
+    ProcessRowRange(1, height_ - 2);
     ProcessBorderRows();
     return true;
   }
@@ -328,8 +328,8 @@ void KapanovaSImageSmoothingMPI::SmoothPixel(uint8_t *out, int x_coord, int y_co
     }
   }
 
-  out[0] = static_cast<uint8_t>(out_r);
-  out[1] = static_cast<uint8_t>(out_g);
-  out[2] = static_cast<uint8_t>(out_b);
+  out[0] = static_cast<uint8_t>(std::clamp(static_cast<int>(std::round(out_r)), 0, 255));
+  out[1] = static_cast<uint8_t>(std::clamp(static_cast<int>(std::round(out_g)), 0, 255));
+  out[2] = static_cast<uint8_t>(std::clamp(static_cast<int>(std::round(out_b)), 0, 255));
 }
 }  // namespace kapanova_s_image_smoothing

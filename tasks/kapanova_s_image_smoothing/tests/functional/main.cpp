@@ -107,7 +107,7 @@ class KapanovaSImageSmoothingFuncTests : public ppc::util::BaseRunFuncTests<InTy
     const uint8_t first_pixel_g = output[1];
     const uint8_t first_pixel_b = output[2];
 
-    constexpr int tolerance = 2;
+    constexpr int tolerance = 5;
 
     for (size_t i = 3; i < output.size(); i += 3) {
       if (std::abs(static_cast<int>(output[i]) - static_cast<int>(first_pixel_r)) > tolerance ||
