@@ -81,7 +81,7 @@ class KapanovaSImageSmoothingFuncTests : public ppc::util::BaseRunFuncTests<InTy
   int height_ = 0;
   std::vector<uint8_t> expected_output_;
 
-  bool IsConstantImage(const std::vector<uint8_t> &image) const {
+  [[nodiscard]] static bool IsConstantImage(const std::vector<uint8_t> &image) {
     if (image.size() < 3) {
       return true;
     }
@@ -98,7 +98,7 @@ class KapanovaSImageSmoothingFuncTests : public ppc::util::BaseRunFuncTests<InTy
     return true;
   }
 
-  bool CheckConstantImage(const std::vector<uint8_t> &output) const {
+  [[nodiscard]] static bool CheckConstantImage(const std::vector<uint8_t> &output) {
     if (output.size() < 3) {
       return true;
     }
@@ -107,19 +107,19 @@ class KapanovaSImageSmoothingFuncTests : public ppc::util::BaseRunFuncTests<InTy
     const uint8_t first_pixel_g = output[1];
     const uint8_t first_pixel_b = output[2];
 
-    constexpr int tolerance = 5;
+    constexpr int kTolerance = 5;
 
     for (size_t i = 3; i < output.size(); i += 3) {
-      if (std::abs(static_cast<int>(output[i]) - static_cast<int>(first_pixel_r)) > tolerance ||
-          std::abs(static_cast<int>(output[i + 1]) - static_cast<int>(first_pixel_g)) > tolerance ||
-          std::abs(static_cast<int>(output[i + 2]) - static_cast<int>(first_pixel_b)) > tolerance) {
+      if (std::abs(static_cast<int>(output[i]) - static_cast<int>(first_pixel_r)) > kTolerance ||
+          std::abs(static_cast<int>(output[i + 1]) - static_cast<int>(first_pixel_g)) > kTolerance ||
+          std::abs(static_cast<int>(output[i + 2]) - static_cast<int>(first_pixel_b)) > kTolerance) {
         return false;
       }
     }
     return true;
   }
 
-  bool CheckSmoothingEffect(const std::vector<uint8_t> &input, const std::vector<uint8_t> &output) const {
+  [[nodiscard]] bool CheckSmoothingEffect(const std::vector<uint8_t> &input, const std::vector<uint8_t> &output) const {
     if (input.size() != output.size()) {
       return false;
     }
@@ -129,16 +129,18 @@ class KapanovaSImageSmoothingFuncTests : public ppc::util::BaseRunFuncTests<InTy
 
     size_t checked_pairs = 0;
 
-    for (int y = 0; y < height_; ++y) {
-      for (int x = 0; x < width_ - 1; ++x) {
-        const size_t idx1 = static_cast<size_t>((y * width_ + x) * 3);
-        const size_t idx2 = static_cast<size_t>((y * width_ + (x + 1)) * 3);
+    for (int y_coord = 0; y_coord < height_; ++y_coord) {
+      for (int x_coord = 0; x_coord < width_ - 1; ++x_coord) {
+        const auto idx1 = static_cast<size_t>((y_coord * width_ + x_coord) * 3);
+        const auto idx2 = static_cast<size_t>((y_coord * width_ + (x_coord + 1)) * 3);
 
-        double brightness1_input = 0.299 * input[idx1] + 0.587 * input[idx1 + 1] + 0.114 * input[idx1 + 2];
-        double brightness2_input = 0.299 * input[idx2] + 0.587 * input[idx2 + 1] + 0.114 * input[idx2 + 2];
+        const double brightness1_input = (0.299 * input[idx1]) + (0.587 * input[idx1 + 1]) + (0.114 * input[idx1 + 2]);
+        const double brightness2_input = (0.299 * input[idx2]) + (0.587 * input[idx2 + 1]) + (0.114 * input[idx2 + 2]);
 
-        double brightness1_output = 0.299 * output[idx1] + 0.587 * output[idx1 + 1] + 0.114 * output[idx1 + 2];
-        double brightness2_output = 0.299 * output[idx2] + 0.587 * output[idx2 + 1] + 0.114 * output[idx2 + 2];
+        const double brightness1_output =
+            (0.299 * output[idx1]) + (0.587 * output[idx1 + 1]) + (0.114 * output[idx1 + 2]);
+        const double brightness2_output =
+            (0.299 * output[idx2]) + (0.587 * output[idx2 + 1]) + (0.114 * output[idx2 + 2]);
 
         input_gradient += std::abs(brightness1_input - brightness2_input);
         output_gradient += std::abs(brightness1_output - brightness2_output);
@@ -150,8 +152,8 @@ class KapanovaSImageSmoothingFuncTests : public ppc::util::BaseRunFuncTests<InTy
       return true;
     }
 
-    input_gradient /= checked_pairs;
-    output_gradient /= checked_pairs;
+    input_gradient /= static_cast<double>(checked_pairs);
+    output_gradient /= static_cast<double>(checked_pairs);
 
     return output_gradient <= input_gradient * 1.1;
   }
