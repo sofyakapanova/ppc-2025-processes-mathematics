@@ -106,7 +106,6 @@ class KapanovaSDijkstraPerfTests : public ::testing::Test {
     EXPECT_TRUE(seq_task.PostProcessing());
 
     auto end = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
 
     auto result = seq_task.GetOutput();
 
@@ -119,11 +118,11 @@ class KapanovaSDijkstraPerfTests : public ::testing::Test {
     for (const auto &dist : result) {
       EXPECT_GE(dist, -1e-6);
     }
-
-    std::cout << "\n=== " << test_name << " ===\n";
-    std::cout << "Vertices: " << graph.vertices_count << '\n';
-    std::cout << "Edges: " << graph.col_idx.size() << '\n';
-    std::cout << "SEQ time: " << duration.count() << " ms\n";
+    
+    // Use the variables to avoid warnings
+    (void)start;
+    (void)end;
+    (void)test_name;
   }
 
   static void RunMPIPerformanceTest(const GraphData &graph, const std::string &test_name) {
@@ -149,15 +148,12 @@ class KapanovaSDijkstraPerfTests : public ::testing::Test {
     for (const auto &dist : result) {
       EXPECT_GE(dist, -1e-6);
     }
-
-    int rank = 0;
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    if (rank == 0) {
-      std::cout << "\n=== " << test_name << " (MPI) ===\n";
-      std::cout << "Vertices: " << graph.vertices_count << '\n';
-      std::cout << "Edges: " << graph.col_idx.size() << '\n';
-      std::cout << "MPI time: " << duration.count() << " ms\n";
-    }
+    
+    // Use the variables to avoid warnings
+    (void)start;
+    (void)end;
+    (void)duration;
+    (void)test_name;
   }
 };
 
