@@ -3,6 +3,7 @@
 #include <mpi.h>
 
 #include <algorithm>
+#include <array>
 #include <climits>
 #include <cmath>
 #include <cstddef>
@@ -67,8 +68,8 @@ bool KapanovaSImageSmoothingMPI::PreProcessingImpl() {
 
     input_.assign(data.begin() + 4, data.end());
 
-    int dimensions[2] = {width_, height_};
-    MPI_Bcast(dimensions, 2, MPI_INT, 0, MPI_COMM_WORLD);
+    std::array<int, 2> dimensions = {width_, height_};
+    MPI_Bcast(dimensions.data(), 2, MPI_INT, 0, MPI_COMM_WORLD);
 
     int image_size = static_cast<int>(input_.size());
     MPI_Bcast(&image_size, 1, MPI_INT, 0, MPI_COMM_WORLD);
@@ -78,12 +79,12 @@ bool KapanovaSImageSmoothingMPI::PreProcessingImpl() {
     }
 
   } else {
-    int dimensions[2];
-    MPI_Bcast(dimensions, 2, MPI_INT, 0, MPI_COMM_WORLD);
+    std::array<int, 2> dimensions = {0, 0};
+    MPI_Bcast(dimensions.data(), 2, MPI_INT, 0, MPI_COMM_WORLD);
     width_ = dimensions[0];
     height_ = dimensions[1];
 
-    int image_size;
+    int image_size = 0;
     MPI_Bcast(&image_size, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
     if (image_size > 0) {
@@ -201,8 +202,8 @@ void KapanovaSImageSmoothingMPI::AssignRowsToWorkers(int start_row, int num_work
       continue;
     }
 
-    int work_info[2] = {kNoEscapeSignal, row_to_process};
-    MPI_Send(work_info, 2, MPI_INT, worker_rank, kTagExit, MPI_COMM_WORLD);
+    std::array<int, 2> work_info = {kNoEscapeSignal, row_to_process};
+    MPI_Send(work_info.data(), 2, MPI_INT, worker_rank, kTagExit, MPI_COMM_WORLD);
 
     SendImageData(worker_rank, row_to_process);
   }
@@ -223,8 +224,8 @@ void KapanovaSImageSmoothingMPI::ReceiveResultsFromWorkers(int start_row, int nu
 
 void KapanovaSImageSmoothingMPI::SendExitSignalToWorkers(int num_workers) {
   for (int i = 1; i <= num_workers; ++i) {
-    int exit_info[2] = {kEscapeSignal, 0};
-    MPI_Send(exit_info, 2, MPI_INT, i, kTagExit, MPI_COMM_WORLD);
+    std::array<int, 2> exit_info = {kEscapeSignal, 0};
+    MPI_Send(exit_info.data(), 2, MPI_INT, i, kTagExit, MPI_COMM_WORLD);
   }
 }
 
@@ -234,10 +235,10 @@ void KapanovaSImageSmoothingMPI::WorkerProcess() {
   std::vector<uint8_t> local_input;
   std::vector<uint8_t> local_result(static_cast<size_t>(local_width * 3));
 
-  int work_info[2];
+  std::array<int, 2> work_info = {0, 0};
 
   while (true) {
-    MPI_Recv(work_info, 2, MPI_INT, 0, kTagExit, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    MPI_Recv(work_info.data(), 2, MPI_INT, 0, kTagExit, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
     int escape_signal = work_info[0];
     int row_to_process = work_info[1];
 
@@ -318,58 +319,87 @@ bool KapanovaSImageSmoothingMPI::PostProcessingImpl() {
   return true;
 }
 
+// Вспомогательные функции для уменьшения когнитивной сложности SmoothPixel
+namespace {
+void ProcessLocalKernelPixel(int ry, int rx, int radius, int k_size, int local_width, int local_height,
+                             int local_y_center, int x_coord, const std::vector<uint8_t> &local_input,
+                             const std::vector<float> &kernel, float &out_r, float &out_g, float &out_b) {
+  int local_y = local_y_center + ry;
+
+  if (local_y < 0 || local_y >= local_height) {
+    return;
+  }
+
+  auto clamp = [](int n, int lo, int hi) { return std::min(std::max(n, lo), hi); };
+  int local_x = clamp(x_coord + rx, 0, local_width - 1);
+
+  const int local_stride = local_width * 3;
+  const auto pixel_pos = static_cast<size_t>(local_y * local_stride) + (static_cast<size_t>(local_x) * 3U);
+  const auto kernel_pos = static_cast<size_t>((ry + radius) * k_size) + static_cast<size_t>(rx + radius);
+
+  out_r += static_cast<float>(local_input[pixel_pos]) * kernel[kernel_pos];
+  out_g += static_cast<float>(local_input[pixel_pos + 1U]) * kernel[kernel_pos];
+  out_b += static_cast<float>(local_input[pixel_pos + 2U]) * kernel[kernel_pos];
+}
+
+void ProcessGlobalKernelPixel(int ry, int rx, int radius, int k_size, int width, int height, int x_coord, int y_coord,
+                              const std::vector<uint8_t> &input, const std::vector<float> &kernel, float &out_r,
+                              float &out_g, float &out_b) {
+  auto clamp = [](int n, int lo, int hi) { return std::min(std::max(n, lo), hi); };
+  int global_y = clamp(y_coord + ry, 0, height - 1);
+  int global_x = clamp(x_coord + rx, 0, width - 1);
+
+  const auto pixel_pos = static_cast<size_t>(global_y * width * 3) + (static_cast<size_t>(global_x) * 3U);
+  const auto kernel_pos = static_cast<size_t>((ry + radius) * k_size) + static_cast<size_t>(rx + radius);
+
+  out_r += static_cast<float>(input[pixel_pos]) * kernel[kernel_pos];
+  out_g += static_cast<float>(input[pixel_pos + 1U]) * kernel[kernel_pos];
+  out_b += static_cast<float>(input[pixel_pos + 2U]) * kernel[kernel_pos];
+}
+
+void ApplyKernelToPixel(bool use_local, int radius, int width, int height, int x_coord, int y_coord,
+                        const std::vector<uint8_t> &global_input, const std::vector<float> &kernel,
+                        const std::vector<uint8_t> *local_input, int local_width, int local_height, float &out_r,
+                        float &out_g, float &out_b) {
+  const int k_size = (2 * radius) + 1;
+
+  if (use_local && local_input != nullptr) {
+    const int local_y_center = 1;
+
+    for (int ry = -radius; ry <= radius; ++ry) {
+      for (int rx = -radius; rx <= radius; ++rx) {
+        ProcessLocalKernelPixel(ry, rx, radius, k_size, local_width, local_height, local_y_center, x_coord,
+                                *local_input, kernel, out_r, out_g, out_b);
+      }
+    }
+  } else {
+    for (int ry = -radius; ry <= radius; ++ry) {
+      for (int rx = -radius; rx <= radius; ++rx) {
+        ProcessGlobalKernelPixel(ry, rx, radius, k_size, width, height, x_coord, y_coord, global_input, kernel, out_r,
+                                 out_g, out_b);
+      }
+    }
+  }
+}
+
+void SetPixelValue(uint8_t *out, float out_r, float out_g, float out_b) {
+  out[0] = static_cast<uint8_t>(std::clamp(static_cast<int>(std::round(out_r)), 0, 255));
+  out[1] = static_cast<uint8_t>(std::clamp(static_cast<int>(std::round(out_g)), 0, 255));
+  out[2] = static_cast<uint8_t>(std::clamp(static_cast<int>(std::round(out_b)), 0, 255));
+}
+}  // namespace
+
 void KapanovaSImageSmoothingMPI::SmoothPixel(uint8_t *out, int x_coord, int y_coord, bool use_local,
                                              const std::vector<uint8_t> *local_input, int local_width,
                                              int local_height) {
-  const int k_size = (2 * radius_) + 1;
   float out_r = 0.0F;
   float out_g = 0.0F;
   float out_b = 0.0F;
 
-  auto clamp = [](int n, int lo, int hi) { return std::min(std::max(n, lo), hi); };
+  ApplyKernelToPixel(use_local, radius_, width_, height_, x_coord, y_coord, input_, kernel_, local_input, local_width,
+                     local_height, out_r, out_g, out_b);
 
-  if (use_local && local_input != nullptr) {
-    const int local_stride = local_width * 3;
-    const int local_y_center = 1;
-
-    for (int ry = -radius_; ry <= radius_; ++ry) {
-      int local_y = local_y_center + ry;
-
-      if (local_y < 0 || local_y >= local_height) {
-        continue;
-      }
-
-      for (int rx = -radius_; rx <= radius_; ++rx) {
-        int local_x = clamp(x_coord + rx, 0, local_width - 1);
-
-        const auto pixel_pos = static_cast<size_t>(local_y * local_stride) + (static_cast<size_t>(local_x) * 3U);
-        const auto kernel_pos = static_cast<size_t>((ry + radius_) * k_size) + static_cast<size_t>(rx + radius_);
-
-        out_r += static_cast<float>((*local_input)[pixel_pos]) * kernel_[kernel_pos];
-        out_g += static_cast<float>((*local_input)[pixel_pos + 1U]) * kernel_[kernel_pos];
-        out_b += static_cast<float>((*local_input)[pixel_pos + 2U]) * kernel_[kernel_pos];
-      }
-    }
-  } else {
-    for (int ry = -radius_; ry <= radius_; ++ry) {
-      int global_y = clamp(y_coord + ry, 0, height_ - 1);
-
-      for (int rx = -radius_; rx <= radius_; ++rx) {
-        int global_x = clamp(x_coord + rx, 0, width_ - 1);
-
-        const auto pixel_pos = static_cast<size_t>(global_y * width_ * 3) + (static_cast<size_t>(global_x) * 3U);
-        const auto kernel_pos = static_cast<size_t>((ry + radius_) * k_size) + static_cast<size_t>(rx + radius_);
-
-        out_r += static_cast<float>(input_[pixel_pos]) * kernel_[kernel_pos];
-        out_g += static_cast<float>(input_[pixel_pos + 1U]) * kernel_[kernel_pos];
-        out_b += static_cast<float>(input_[pixel_pos + 2U]) * kernel_[kernel_pos];
-      }
-    }
-  }
-
-  out[0] = static_cast<uint8_t>(std::clamp(static_cast<int>(std::round(out_r)), 0, 255));
-  out[1] = static_cast<uint8_t>(std::clamp(static_cast<int>(std::round(out_g)), 0, 255));
-  out[2] = static_cast<uint8_t>(std::clamp(static_cast<int>(std::round(out_b)), 0, 255));
+  SetPixelValue(out, out_r, out_g, out_b);
 }
 
 }  // namespace kapanova_s_image_smoothing
