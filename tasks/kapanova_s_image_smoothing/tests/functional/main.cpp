@@ -204,7 +204,7 @@ void ProcessWorkerMessages() {
 
   while (true) {
     MPI_Iprobe(MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &flag, &status);
-    if (!flag) {
+    if (flag == 0) {
       break;
     }
 
@@ -227,8 +227,8 @@ void ProcessWorkerMessages() {
       }
     } else {
       std::vector<uint8_t> buffer(1024);
-      constexpr int buffer_size = 1024;  // Явное преобразование
-      MPI_Recv(buffer.data(), buffer_size, MPI_UNSIGNED_CHAR, 0, status.MPI_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+      constexpr int kBufferSize = 1024;  // Явное преобразование
+      MPI_Recv(buffer.data(), kBufferSize, MPI_UNSIGNED_CHAR, 0, status.MPI_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
     }
   }
 }

@@ -36,10 +36,10 @@ class KapanovaSImageSmoothingMPI : public BaseTask {
   void DistributeRowsToWorkers(int num_workers);
   void AssignRowsToWorkers(int start_row, int num_workers);
   void ReceiveResultsFromWorkers(int start_row, int num_workers);
-  void SendExitSignalToWorkers(int num_workers);  // Убрано static
+  static void SendExitSignalToWorkers(int num_workers);  // Убрано static
 
   void WorkerProcess();
-  int ReceiveImageData(std::vector<uint8_t> &buffer);  // Убрано static
+  static int ReceiveImageData(std::vector<uint8_t> &buffer);  // Убрано static
   void ProcessAndSendResult(int local_width, const std::vector<uint8_t> &input, std::vector<uint8_t> &result,
                             int rows_received, int row_to_process);
   [[nodiscard]] static int GetCommRank();
