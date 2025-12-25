@@ -63,10 +63,10 @@ void KapanovaSImageSmoothingSEQ::CreateKernel() {
     for (int j = -radius_; j <= radius_; ++j) {
       const int temp_index = ((i + radius_) * size) + (j + radius_);
       const auto kernel_index = static_cast<size_t>(temp_index);
-      
+
       // ПРАВИЛЬНАЯ формула Гаусса: exp(-(i² + j²) / (2σ²))
       kernel_[kernel_index] = std::exp(-static_cast<float>((i * i) + (j * j)) / (2.0F * kSigmaSquared));
-      
+
       norm += kernel_[kernel_index];
     }
   }

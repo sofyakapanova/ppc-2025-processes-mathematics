@@ -41,7 +41,7 @@ class KapanovaSImageSmoothingMPI : public BaseTask {
   void WorkerProcess();
   static int ReceiveImageData(std::vector<uint8_t> &buffer);
   void ProcessAndSendResult(int local_width, const std::vector<uint8_t> &input, std::vector<uint8_t> &result,
-                            int rows_received, int row_to_process);  
+                            int rows_received, int row_to_process);
   [[nodiscard]] static int GetCommRank();
   [[nodiscard]] static int GetCommSize();
 

@@ -200,20 +200,16 @@ TEST(KapanovaSImageSmoothingFuncTests, CompareSEQandMPI) {
   int size = 0;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   MPI_Comm_size(MPI_COMM_WORLD, &size);
-  
-  const std::vector<std::pair<int, int>> test_sizes = {
-      {10, 10},
-      {100, 100},
-      {400, 400}
-  };
-  
+
+  const std::vector<std::pair<int, int>> test_sizes = {{10, 10}, {100, 100}, {400, 400}};
+
   std::random_device rd;
   std::mt19937 gen(rd());
   std::uniform_int_distribution<> dis(0, 255);
-  
-  for (const auto& [width, height] : test_sizes) {
+
+  for (const auto &[width, height] : test_sizes) {
     MPI_Barrier(MPI_COMM_WORLD);
-    
+
     if (rank != 0) {
       int flag = 1;
       MPI_Status status;
@@ -225,7 +221,7 @@ TEST(KapanovaSImageSmoothingFuncTests, CompareSEQandMPI) {
           if (count <= 0) {
             MPI_Get_count(&status, MPI_UNSIGNED_CHAR, &count);
           }
-          
+
           if (count > 0) {
             std::vector<uint8_t> buffer(static_cast<size_t>(count));
             if (status.MPI_TAG == 999 || status.MPI_TAG < 10) {
@@ -233,21 +229,20 @@ TEST(KapanovaSImageSmoothingFuncTests, CompareSEQandMPI) {
                 int dummy;
                 MPI_Recv(&dummy, 1, MPI_INT, 0, 999, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
               } else {
-                MPI_Recv(buffer.data(), count, MPI_UNSIGNED_CHAR, 0, status.MPI_TAG, 
-                        MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                MPI_Recv(buffer.data(), count, MPI_UNSIGNED_CHAR, 0, status.MPI_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
               }
             }
           } else {
             std::vector<uint8_t> buffer(1024);
-            MPI_Recv(buffer.data(), buffer.size(), MPI_UNSIGNED_CHAR, 0, status.MPI_TAG, 
-                    MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            MPI_Recv(buffer.data(), buffer.size(), MPI_UNSIGNED_CHAR, 0, status.MPI_TAG, MPI_COMM_WORLD,
+                     MPI_STATUS_IGNORE);
           }
         }
       }
     }
-    
+
     MPI_Barrier(MPI_COMM_WORLD);
-    
+
     std::vector<uint8_t> image_data;
     if (rank == 0) {
       image_data.resize(static_cast<size_t>(width) * static_cast<size_t>(height) * 3);
@@ -255,51 +250,50 @@ TEST(KapanovaSImageSmoothingFuncTests, CompareSEQandMPI) {
         image_data[i] = static_cast<uint8_t>(dis(gen));
       }
     }
-    
+
     kapanova_s_image_smoothing::InType formatted_input;
     if (rank == 0) {
       std::vector<uint8_t> data;
-      
+
       data.push_back(static_cast<uint8_t>(width & 0xFF));
       data.push_back(static_cast<uint8_t>((width >> 8) & 0xFF));
       data.push_back(static_cast<uint8_t>(height & 0xFF));
       data.push_back(static_cast<uint8_t>((height >> 8) & 0xFF));
-      
+
       data.insert(data.end(), image_data.begin(), image_data.end());
       formatted_input.push_back(data);
     }
-    
+
     kapanova_s_image_smoothing::KapanovaSImageSmoothingMPI mpi_task(formatted_input);
-    bool mpi_success = mpi_task.Validation() && mpi_task.PreProcessing() && 
-                       mpi_task.Run() && mpi_task.PostProcessing();
-    
+    bool mpi_success = mpi_task.Validation() && mpi_task.PreProcessing() && mpi_task.Run() && mpi_task.PostProcessing();
+
     std::vector<uint8_t> mpi_result;
     if (rank == 0) {
       mpi_result = mpi_task.GetOutput();
     }
-    
+
     if (rank == 0) {
       kapanova_s_image_smoothing::KapanovaSImageSmoothingSEQ seq_task(formatted_input);
-      bool seq_success = seq_task.Validation() && seq_task.PreProcessing() && 
-                         seq_task.Run() && seq_task.PostProcessing();
-      
+      bool seq_success =
+          seq_task.Validation() && seq_task.PreProcessing() && seq_task.Run() && seq_task.PostProcessing();
+
       auto seq_result = seq_task.GetOutput();
-      
+
       EXPECT_TRUE(mpi_success);
       EXPECT_TRUE(seq_success);
       EXPECT_FALSE(mpi_result.empty());
       EXPECT_FALSE(seq_result.empty());
       EXPECT_EQ(mpi_result.size(), static_cast<size_t>(width) * static_cast<size_t>(height) * 3);
       EXPECT_EQ(seq_result.size(), mpi_result.size());
-      
+
       if (seq_result.size() == mpi_result.size()) {
         EXPECT_EQ(seq_result, mpi_result);
       }
     }
-    
+
     MPI_Barrier(MPI_COMM_WORLD);
   }
-  
+
   MPI_Barrier(MPI_COMM_WORLD);
 }
 
@@ -308,38 +302,33 @@ TEST(KapanovaSImageSmoothingFuncTests, SimpleMPITest) {
   int size = 0;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   MPI_Comm_size(MPI_COMM_WORLD, &size);
-  
+
   if (size > 1) {
     if (rank == 0) {
       int ping = 123;
       MPI_Send(&ping, 1, MPI_INT, 1, 100, MPI_COMM_WORLD);
-      
+
       int pong;
       MPI_Recv(&pong, 1, MPI_INT, 1, 200, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
     } else if (rank == 1) {
       int ping;
       MPI_Recv(&ping, 1, MPI_INT, 0, 100, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-      
+
       int pong = 456;
       MPI_Send(&pong, 1, MPI_INT, 0, 200, MPI_COMM_WORLD);
     }
   }
-  
+
   MPI_Barrier(MPI_COMM_WORLD);
-  
-  EXPECT_TRUE(true); 
+
+  EXPECT_TRUE(true);
 }
 
 TEST(KapanovaSImageSmoothingFuncTests, EdgeCases) {
   int rank = 0;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-  const std::vector<std::pair<int, int>> edge_sizes = {
-      {1, 100},
-      {100, 1},
-      {2, 2},
-      {3, 3}
-  };
+  const std::vector<std::pair<int, int>> edge_sizes = {{1, 100}, {100, 1}, {2, 2}, {3, 3}};
 
   std::random_device rd;
   std::mt19937 gen(rd());
