@@ -161,8 +161,8 @@ TEST_F(KapanovaSDijkstraPerfTests, SmallRandomGraphSEQ) {
 }
 
 TEST_F(KapanovaSDijkstraPerfTests, MediumRandomGraphSEQ) {
-  GraphData graph = GenerateRandomGraph(10000, 0.05);
-  RunSeqPerformanceTest(graph, "Medium Random Graph SEQ (500 vertices)");
+  GraphData graph = GenerateRandomGraph(12000, 0.05);
+  RunSeqPerformanceTest(graph, "Medium Random Graph SEQ (12000 vertices)");
 }
 
 TEST_F(KapanovaSDijkstraPerfTests, ChainGraphSEQ) {
@@ -181,8 +181,8 @@ TEST_F(KapanovaSDijkstraPerfTests, SmallRandomGraphMPI) {
 }
 
 TEST_F(KapanovaSDijkstraPerfTests, MediumRandomGraphMPI) {
-  GraphData graph = GenerateRandomGraph(10000, 0.05);
-  RunMPIPerformanceTest(graph, "Medium Random Graph MPI (500 vertices)");
+  GraphData graph = GenerateRandomGraph(12000, 0.05);
+  RunMPIPerformanceTest(graph, "Medium Random Graph MPI (12000 vertices)");
 }
 
 TEST_F(KapanovaSDijkstraPerfTests, ChainGraphMPI) {
