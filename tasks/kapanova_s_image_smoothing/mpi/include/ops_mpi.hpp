@@ -24,7 +24,6 @@ class KapanovaSImageSmoothingMPI : public BaseTask {
   void SmoothPixel(uint8_t *out, int x_coord, int y_coord, bool use_local = false,
                    const std::vector<uint8_t> *local_input = nullptr, int local_width = 0, int local_height = 0);
 
-  // Исправление: добавлен static
   [[nodiscard]] static std::vector<float> CreateKernel();
 
   void ProcessBorderRows();
@@ -34,27 +33,16 @@ class KapanovaSImageSmoothingMPI : public BaseTask {
   [[nodiscard]] int CalculateStartPosition(int row) const;
 
   void MasterProcess();
-  void SendWidthToWorkers(int num_workers) const;
   void DistributeRowsToWorkers(int num_workers);
   void AssignRowsToWorkers(int start_row, int num_workers);
   void ReceiveResultsFromWorkers(int start_row, int num_workers);
-
-  // Исправление: добавлен static и убрано const (статические методы не могут быть const)
   static void SendExitSignalToWorkers(int num_workers);
 
   void WorkerProcess();
-  void ProcessWorkerTasks(int local_width);
-
-  // Исправление: добавлен static
   static int ReceiveImageData(std::vector<uint8_t> &buffer);
-
   void ProcessAndSendResult(int local_width, const std::vector<uint8_t> &input, std::vector<uint8_t> &result,
-                            int rows_received);
-
-  // Исправление: добавлен static и убрано const
+                            int rows_received, int row_to_process);  
   [[nodiscard]] static int GetCommRank();
-
-  // Исправление: добавлен static и убрано const
   [[nodiscard]] static int GetCommSize();
 
   int width_ = 0;

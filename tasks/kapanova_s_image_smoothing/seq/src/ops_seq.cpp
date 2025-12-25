@@ -56,13 +56,17 @@ void KapanovaSImageSmoothingSEQ::CreateKernel() {
   const auto size_u = static_cast<size_t>(size);
   kernel_.resize(size_u * size_u);
   constexpr float kSigma = 1.5F;
+  constexpr float kSigmaSquared = kSigma * kSigma;  // σ²
   float norm = 0.0F;
 
   for (int i = -radius_; i <= radius_; ++i) {
     for (int j = -radius_; j <= radius_; ++j) {
       const int temp_index = ((i + radius_) * size) + (j + radius_);
       const auto kernel_index = static_cast<size_t>(temp_index);
-      kernel_[kernel_index] = std::exp(-(static_cast<float>((i * i) + (j * j))) / ((2.0F * kSigma) * kSigma));
+      
+      // ПРАВИЛЬНАЯ формула Гаусса: exp(-(i² + j²) / (2σ²))
+      kernel_[kernel_index] = std::exp(-static_cast<float>((i * i) + (j * j)) / (2.0F * kSigmaSquared));
+      
       norm += kernel_[kernel_index];
     }
   }
